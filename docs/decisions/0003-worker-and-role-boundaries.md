@@ -1,0 +1,9 @@
+# 0003 — Role separation and worker confinement
+
+Use Linux rootful Compose. Serve UID 10001 reads the published store and PostgreSQL. Sync UID 10002 owns store writes, private staging, and scoped DML. Optional feed UID 10003 has pairwise credentials and hint network wiring. Migrations authenticate separately. PostgreSQL uses SCRAM and verifies TLS chain and hostname at the Rust client. The bootstrap socket accepts the PostgreSQL OS account through peer authentication.
+
+Docker caps, default seccomp, no-new-privileges, mount modes, and host filtering form the outer boundary. Start with restricted ingress, DB read/write, notification, feed-control, and sync/feed egress bridges. The Phase 0 rules allow fixture endpoints only. Scope future control messages with separate feed-to-sync and sync-to-serve keys and the approved HMAC-SHA-384 envelope. Keep cursor signing independent. Phase 6 implements control messages.
+
+The Git worker can open one selected bare ODB for reads. Its static Git worker supports a fixed read operation, with replacements and outside configuration disabled. The static ripgrep worker consumes approved bytes over stdin and has no Git-store path access. Both use a fresh worker process, restricted cwd and environment, explicit stdio, closed inherited descriptors, resource limits, no-new-privileges, Landlock, and a syscall allowlist. Executable access is limited to the applicable immutable tool. Setup failure stops the worker before it processes input. The Phase 0 operator probe validates these controls against synthetic files and sockets.
+
+[Docker firewall behavior](https://docs.docker.com/engine/network/packet-filtering-firewalls/) · [Landlock](https://www.kernel.org/doc/html/latest/userspace-api/landlock.html) · [Seccomp](https://docs.kernel.org/userspace-api/seccomp_filter.html) · [PostgreSQL TLS verification](https://www.postgresql.org/docs/19/libpq-ssl.html) · [HMAC](https://www.rfc-editor.org/rfc/rfc2104.html)

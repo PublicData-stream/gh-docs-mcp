@@ -1,0 +1,11 @@
+# 0001 — Native Git storage and publication fences
+
+Use one bare Git object database per repository. Reserve `/git-store/repositories/<uuid>` for bare data and separate sibling directories for manifests and stable lock inodes. Sync also has a private staging and quarantine mount. PostgreSQL will own the catalog, visibility state, publication sequences, and jobs. Git refs alone grant no visibility. Phase 0 creates synthetic bare repositories and a database probe relation.
+
+Use UUIDv4 for repositories, sources, requests, and transient attachments. Qualify UUIDv7 before use for jobs, notifications, or incidents. Use separate per-repository nonnegative BIGINT generation IDs and publication sequences, serialized as decimal strings on the wire. Allocate unique typed advisory lock keys. OIDs carry a repo scope, a format, and the full native digest. SHA-1 is 20 bytes and SHA-256 is 32 bytes. Qualify SHA-256 reads and fetch before advertising support.
+
+Use a writer coordinator, repository filesystem fence, matching database fence, generation filesystem fence, then matching database fence. Readers share fences and recheck visibility in a fresh READ COMMITTED READ ONLY statement. Keep the filesystem fence until subprocesses have been reaped, including after DB loss. Writers take the repository filesystem fence exclusively for canonical installation, retirement, and maintenance. Install and flush objects, refs, and manifests before committing the PostgreSQL pointer and outbox. Treat the DB commit as the visibility boundary.
+
+Protect three inactive generations plus all generations demoted within 24 hours as initial design defaults. Phase 0 measures basic flock and fsync behavior on the chosen local filesystem. Phases 1–3 define the manifest encoding and prove storage, publication, and recovery.
+
+[Git repository layout](https://git-scm.com/docs/gitrepository-layout) · [Pack format](https://git-scm.com/docs/gitformat-pack) · [Hash format transition](https://git-scm.com/docs/hash-function-transition) · [Git configuration and fsync](https://git-scm.com/docs/git-config) · [UUIDs](https://www.rfc-editor.org/rfc/rfc9562.html) · [PostgreSQL advisory locks](https://www.postgresql.org/docs/19/explicit-locking.html#ADVISORY-LOCKS)
