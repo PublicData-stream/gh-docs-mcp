@@ -16,8 +16,8 @@ use gh_docs_core::{
     Result,
     git::{ObjectFormat, Oid, RepositoryId},
 };
-use gh_docs_git::store::{self, LockScope};
-use gh_docs_storage::publication::writer_fence;
+use gh_docs_git::store::{self, LockMode, LockScope};
+use gh_docs_storage::publication::{filesystem_fence, writer_advisory_fence};
 use serde_json::{Value, json};
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -61,23 +61,25 @@ pub async fn reconcile(
     store::initialize()?;
     store::ensure_lock(repository, LockScope::Coordinator)?;
     store::ensure_lock(repository, LockScope::Repository)?;
-    let _fence = match writer_fence(client, repository, LockScope::Coordinator).await {
-        Ok(fence) => fence,
-        Err(error)
-            if error
-                .downcast_ref::<std::io::Error>()
-                .is_some_and(|io| io.kind() == std::io::ErrorKind::TimedOut) =>
-        {
-            println!("{}", json!({"outcome":"busy","reason":"repository_writer"}));
-            return Err("repository synchronization is in progress".into());
-        }
-        Err(error) => return Err(error),
-    };
+    let _fence =
+        match filesystem_fence(repository, LockScope::Coordinator, LockMode::Exclusive).await {
+            Ok(fence) => fence,
+            Err(error)
+                if error
+                    .downcast_ref::<std::io::Error>()
+                    .is_some_and(|io| io.kind() == std::io::ErrorKind::TimedOut) =>
+            {
+                println!("{}", json!({"outcome":"busy","reason":"repository_writer"}));
+                return Err("repository synchronization is in progress".into());
+            }
+            Err(error) => return Err(error),
+        };
     let Some(slot) = private::Slot::acquire()? else {
         println!("{}", json!({"outcome":"busy","reason":"global_limit"}));
         return Err("all synchronization slots are in use".into());
     };
     let approval = approval::load(client, repository).await?;
+    writer_advisory_fence(client, repository, LockScope::Coordinator).await?;
     let (_, source, format) = approval.validate()?;
     let job: Uuid = client
         .query_one(

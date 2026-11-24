@@ -46,6 +46,16 @@ fn scope_sql(scope: LockScope) -> (&'static str, Option<i64>) {
 /// Keep the returned independent filesystem guard across all protected work.
 pub async fn writer_fence(client: &Client, repo: RepositoryId, scope: LockScope) -> Result<Fence> {
     let guard = filesystem_fence(repo, scope, LockMode::Exclusive).await?;
+    writer_advisory_fence(client, repo, scope).await?;
+    Ok(guard)
+}
+
+/// Pair an already-held exclusive filesystem fence with its database key.
+pub async fn writer_advisory_fence(
+    client: &Client,
+    repo: RepositoryId,
+    scope: LockScope,
+) -> Result<()> {
     let (name, generation) = scope_sql(scope);
     let key: i64 = client
         .query_one(
@@ -62,7 +72,7 @@ pub async fn writer_fence(client: &Client, repo: RepositoryId, scope: LockScope)
     {
         return Err("database publication fence busy".into());
     }
-    Ok(guard)
+    Ok(())
 }
 
 /// Release a generation lock before acquiring a different generation group on

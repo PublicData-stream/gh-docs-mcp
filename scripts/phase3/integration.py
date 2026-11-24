@@ -215,9 +215,14 @@ def acknowledgment(stack, repo, generation, sequence):
 
 
 def pack_read(stack, repo, oid, *, present=True):
-    tested = stack.exec("sync", "git", "--git-dir", f"/git-store/repositories/{repo}",
-                        "cat-file", "-t", oid, expected=None)
-    assert (tested.returncode == 0) == present, (oid, tested.stdout)
+    tested = stack.exec("sync", "env", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null",
+                        "GIT_NO_REPLACE_OBJECTS=1", "LC_ALL=C", "git",
+                        "--git-dir", f"/git-store/repositories/{repo}", "cat-file", "-t", oid,
+                        expected=None)
+    if present:
+        assert tested.returncode == 0 and tested.stdout.strip() == "commit", (oid, tested.stdout)
+    else:
+        assert tested.returncode and "could not get object info" in tested.stdout, (oid, tested.stdout)
 
 
 def install_boundaries(stack, upstream, endpoint, repo, generation, oid):

@@ -35,8 +35,10 @@ A writer takes the filesystem coordinator, its PostgreSQL session advisory
 lock, the repository filesystem fence, and its session advisory lock. Canonical
 commands then take the sync-private storage admission lock and the needed
 generation fences. For multiple generations, acquire filesystem and advisory
-fences in pairs in ascending generation ID order. Reconcile holds the
-coordinator during fetch and uses short SQL statements to seal a candidate.
+fences in pairs in ascending generation ID order. Reconcile takes the filesystem coordinator before checking slot capacity.
+It checks approval and pairs that coordinator with its advisory lock before
+starting a job. It holds both during fetch and uses short SQL statements to
+seal a candidate.
 The policy writer takes only the repository advisory fence before changing
 approval rows. Its database role has no store mount.
 
