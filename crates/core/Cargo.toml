@@ -5,3 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
+
+[dependencies]
+base64.workspace = true
+uuid.workspace = true

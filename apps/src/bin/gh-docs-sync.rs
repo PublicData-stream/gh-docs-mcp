@@ -6,10 +6,8 @@ use gh_docs_storage::connect;
 async fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
     if matches!(args.as_slice(), [flag] if flag == "--migrate") {
-        let (client, driver) = connect("gh_docs_migrate").await?;
-        let result = client
-            .batch_execute(include_str!("../../../migrations/0001_foundation.sql"))
-            .await;
+        let (mut client, driver) = connect("gh_docs_migrate").await?;
+        let result = gh_docs_storage::catalog::migrate(&mut client).await;
         drop(client);
         driver.await?;
         result?;

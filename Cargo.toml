@@ -11,10 +11,12 @@ publish = false
 
 [workspace.dependencies]
 axum = "=0.8.9"
+base64 = "0.22"
 libc = "0.2"
 rmcp = { version = "=3.11.0", default-features = false, features = ["server", "transport-streamable-http-server"] }
 rustls = { version = "0.23", default-features = false, features = ["std", "ring", "tls12"] }
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "time"] }
-tokio-postgres = "0.7"
+tokio-postgres = { version = "0.7", features = ["with-uuid-1", "with-serde_json-1"] }
 tokio-postgres-rustls = { version = "0.14", default-features = false, features = ["ring"] }
+uuid = "1"

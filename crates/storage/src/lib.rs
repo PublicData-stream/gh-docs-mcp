@@ -110,3 +110,5 @@ pub async fn probe(mut client: Client, name: &str) -> Result<()> {
     println!("database probe passed");
     Ok(())
 }
+
+pub mod catalog;
