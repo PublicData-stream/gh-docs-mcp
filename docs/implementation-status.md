@@ -42,3 +42,11 @@ sudo -n python3 -B scripts/phase0/integration.py --node /home/code/.nvm/versions
 The Compose transcript includes the exact Buildx commands. The missing-image check is recorded at `/tmp/gh-docs-phase0-missing-image.log`. The rootless UID/GID mapping observation is at `/tmp/gh-docs-phase0-rootless-map.log`.
 
 The Phase 0 gate passed on the declared local profile. Hosted CI, ARM64, rootless end-to-end confinement, and product UI interoperability were outside this run. The filesystem probes cover active-kernel behavior. Power-loss durability and SHA-256 ingestion and fetch remain separate qualification gates. The live allowlist is empty, and `github/docs` is recorded as a candidate for review. Production release requires the later phase gates.
+
+## Contributor documentation verification
+
+On 2026-11-24, `git diff --check` passed, all 12 local links and their anchors
+resolved, and the documented Rust commands matched the checked-in gate and
+CI. The offline Rust gate passed formatting, Clippy, workspace tests, and doc
+tests. The Phase 0 entry above records the separate Compose qualification and
+its tested revision.
