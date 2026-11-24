@@ -1,10 +1,11 @@
 """Rootful Compose traffic policy for one disposable project."""
 
+from ipaddress import ip_address, ip_network
 from pathlib import Path
 from subprocess import run
 
 
-def install(name, env, fixture_root):
+def install(name, env, fixture_root, *, sync_fixture=False, sync_https=(), sync_resolver=None):
     # Bridge forwarding covers packets switched within a project bridge even
     # on hosts with br_netfilter disabled. Inet covers routed and host traffic.
     edges = [
@@ -26,6 +27,16 @@ def install(name, env, fixture_root):
         for suffix, family in (("IP", "ip"), ("V6", "ip6"))
         if suffix in families
     ]
+    if sync_fixture:
+        for port in (8443, 8088):
+            allows.append(f"ip saddr {env['SYNC_EGRESS_IP']} ip daddr {env['UPSTREAM_IP']} tcp dport {port} counter accept")
+    for target in map(ip_network, sync_https):
+        family, suffix = ("ip", "IP") if target.version == 4 else ("ip6", "V6")
+        allows.append(f"{family} saddr {env[f'SYNC_EGRESS_{suffix}']} {family} daddr {target} tcp dport 443 counter accept")
+    if sync_resolver:
+        target = ip_address(sync_resolver)
+        family, suffix = ("ip", "IP") if target.version == 4 else ("ip6", "V6")
+        allows.append(f"{family} saddr {env[f'SYNC_EGRESS_{suffix}']} {family} daddr {target} meta l4proto {{ udp, tcp }} th dport 53 counter accept")
     common = ["ct state established,related accept"]
     routed = [*common, f"{inet_scope} {neighbor_discovery} accept",
               *(f"{inet_scope} {rule}" for rule in allows),

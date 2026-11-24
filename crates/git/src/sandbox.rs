@@ -156,7 +156,7 @@ pub(crate) fn confine(
     set_limit(libc::RLIMIT_AS, 256 * 1024 * 1024)?;
     set_limit(libc::RLIMIT_FSIZE, 0)?;
     set_limit(libc::RLIMIT_CORE, 0)?;
-    install_seccomp()?;
+    install_seccomp(false)?;
     Ok(abi)
 }
 
@@ -322,7 +322,7 @@ fn add_landlock_anchor(ruleset: &File, anchor: &File, access: u64) -> io::Result
     Ok(())
 }
 
-fn install_seccomp() -> io::Result<()> {
+fn install_seccomp(sync: bool) -> io::Result<()> {
     // Audit architectures and seccomp return actions from Linux UAPI.
     #[cfg(target_arch = "x86_64")]
     const ARCH: u32 = 0xc000_003e;
@@ -400,6 +400,78 @@ fn install_seccomp() -> io::Result<()> {
         filter.push(instruction(0x15, 0, 1, syscall as u32));
         filter.push(instruction(0x06, 0, 0, ALLOW));
     }
+    if sync {
+        for syscall in [
+            libc::SYS_wait4,
+            libc::SYS_pipe2,
+            libc::SYS_dup,
+            libc::SYS_dup3,
+            libc::SYS_fsync,
+            libc::SYS_fdatasync,
+            libc::SYS_fchmod,
+            libc::SYS_fcntl,
+            libc::SYS_mkdirat,
+            libc::SYS_unlinkat,
+            libc::SYS_renameat,
+            libc::SYS_renameat2,
+            libc::SYS_linkat,
+            libc::SYS_getppid,
+            libc::SYS_getuid,
+            libc::SYS_geteuid,
+            libc::SYS_getgid,
+            libc::SYS_getegid,
+            libc::SYS_umask,
+            libc::SYS_gettimeofday,
+            libc::SYS_times,
+            libc::SYS_getrlimit,
+            libc::SYS_getrusage,
+            libc::SYS_uname,
+            libc::SYS_ftruncate,
+            libc::SYS_writev,
+            libc::SYS_nanosleep,
+            libc::SYS_clock_nanosleep,
+            libc::SYS_getpgid,
+            libc::SYS_sched_yield,
+        ] {
+            filter.push(instruction(0x15, 0, 1, syscall as u32));
+            filter.push(instruction(0x06, 0, 0, ALLOW));
+        }
+        #[cfg(target_arch = "x86_64")]
+        for syscall in [
+            libc::SYS_pipe,
+            libc::SYS_dup2,
+            libc::SYS_mkdir,
+            libc::SYS_unlink,
+            libc::SYS_rename,
+            libc::SYS_link,
+            libc::SYS_fork,
+            libc::SYS_vfork,
+        ] {
+            filter.push(instruction(0x15, 0, 1, syscall as u32));
+            filter.push(instruction(0x06, 0, 0, ALLOW));
+        }
+        // Git and musl may fork or create threads. Keep namespaces, process
+        // group changes and children reparented outside the worker denied.
+        let clone_flags = 0xff
+            | libc::CLONE_VM
+            | libc::CLONE_FS
+            | libc::CLONE_FILES
+            | libc::CLONE_SIGHAND
+            | libc::CLONE_THREAD
+            | libc::CLONE_SYSVSEM
+            | libc::CLONE_SETTLS
+            | libc::CLONE_PARENT_SETTID
+            | libc::CLONE_CHILD_SETTID
+            | libc::CLONE_CHILD_CLEARTID
+            | libc::CLONE_DETACHED
+            | libc::CLONE_VFORK;
+        filter.extend([
+            instruction(0x15, 0, 3, libc::SYS_clone as u32),
+            instruction(0x20, 0, 0, 16),
+            instruction(0x45, 1, 0, !clone_flags as u32),
+            instruction(0x06, 0, 0, ALLOW),
+        ]);
+    }
     filter.push(instruction(0x06, 0, 0, DENY));
     let program = libc::sock_fprog {
         len: u16::try_from(filter.len()).expect("fixed seccomp program fits"),
@@ -408,4 +480,65 @@ fn install_seccomp() -> io::Result<()> {
     // SAFETY: the kernel copies the initialized BPF program during this call.
     checked(unsafe { libc::syscall(libc::SYS_seccomp, 1_u32, 0_u32, &program) })?;
     Ok(())
+}
+
+pub fn confine_sync(scratch: &str, broker: bool) -> io::Result<()> {
+    const EXECUTE: u64 = 1;
+    const WRITE_FILE: u64 = 1 << 1;
+    const READ_FILE: u64 = 1 << 2;
+    const READ_DIR: u64 = 1 << 3;
+    let abi = checked(unsafe {
+        libc::syscall(
+            libc::SYS_landlock_create_ruleset,
+            std::ptr::null::<u8>(),
+            0,
+            1,
+        )
+    })?;
+    if abi < 6 {
+        return Err(io::Error::other("sync requires Landlock ABI 6"));
+    }
+    no_new_privileges()?;
+    let attributes = [(1_u64 << 16) - 1, 0, 1_u64 << 1];
+    // Scope signals as well as filesystem access. Unix/TCP socket creation
+    // is denied by seccomp, including for Git's helper descendants.
+    let ruleset = checked(unsafe {
+        libc::syscall(
+            libc::SYS_landlock_create_ruleset,
+            attributes.as_ptr(),
+            24,
+            0,
+        )
+    })?;
+    let ruleset = unsafe { File::from_raw_fd(ruleset as i32) };
+    add_landlock_rule(&ruleset, GIT, EXECUTE | READ_FILE)?;
+    if broker {
+        add_landlock_rule(
+            &ruleset,
+            "/usr/local/libexec/gh-docs-git/git-remote-ghdocs",
+            EXECUTE | READ_FILE,
+        )?;
+    }
+    add_landlock_rule(&ruleset, "/dev/null", READ_FILE | WRITE_FILE)?;
+    // Scratch can contain regular files and directories. Deny executable,
+    // symlink, socket and special-file creation even within the slot.
+    let scratch_rights = READ_FILE
+        | WRITE_FILE
+        | READ_DIR
+        | (1 << 4)
+        | (1 << 5)
+        | (1 << 7)
+        | (1 << 8)
+        | (1 << 13)
+        | (1 << 14);
+    add_landlock_rule(&ruleset, scratch, scratch_rights)?;
+    checked(unsafe { libc::syscall(libc::SYS_landlock_restrict_self, ruleset.as_raw_fd(), 0) })?;
+    drop(ruleset);
+    let first = if broker { 4_u32 } else { 3_u32 };
+    checked(unsafe { libc::syscall(libc::SYS_close_range, first, u32::MAX, 0_u32) })?;
+    set_limit(libc::RLIMIT_CPU, 180)?;
+    set_limit(libc::RLIMIT_AS, 768 * 1024 * 1024)?;
+    set_limit(libc::RLIMIT_FSIZE, 272 * 1024 * 1024)?;
+    set_limit(libc::RLIMIT_CORE, 0)?;
+    install_seccomp(true)
 }

@@ -2,9 +2,9 @@
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use gh_docs_core::git::{ObjectFormat, RefName, RepositoryId};
+use gh_docs_core::git_manifest::{self, Check};
 use gh_docs_storage::catalog::RefSnapshot;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 pub struct Observation<'a> {
@@ -53,24 +53,13 @@ impl Observation<'_> {
     }
 
     pub fn digests(&self) -> Result<Digests, &'static str> {
-        let content = self.content()?;
-        let logical = digest(b"gh-docs-manifest-content-v1\0", &content);
-        let envelope = json!([
-            "gh-docs-manifest",
-            1,
-            content,
-            ["verified", "fixture_checks", self.observed_at]
-        ]);
-        let observed = digest(b"gh-docs-manifest-observation-v1\0", &envelope);
-        Ok(Digests { logical, observed })
+        let manifest =
+            git_manifest::encode(self.content()?, Check::OfflineFixture, self.observed_at);
+        Ok(Digests {
+            logical: manifest.logical,
+            observed: manifest.observed,
+        })
     }
-}
-
-fn digest(domain: &[u8], data: &Value) -> [u8; 32] {
-    let mut hash = Sha256::new();
-    hash.update(domain);
-    hash.update(data.to_string());
-    hash.finalize().into()
 }
 
 #[cfg(test)]

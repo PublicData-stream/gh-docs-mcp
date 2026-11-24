@@ -12,6 +12,7 @@ gh-docs-core = { path = "../crates/core" }
 gh-docs-git = { path = "../crates/git" }
 gh-docs-search = { path = "../crates/search" }
 gh-docs-storage = { path = "../crates/storage" }
+gh-docs-sync = { path = "../crates/sync" }
 gh-docs-test-support = { path = "../crates/test-support", optional = true }
 rmcp.workspace = true
 serde_json.workspace = true
@@ -19,7 +20,12 @@ tokio.workspace = true
 
 [features]
 phase1-fixtures = ["dep:gh-docs-test-support"]
+phase2-fixtures = ["gh-docs-sync/fixtures"]
 
 [[bin]]
 name = "gh-docs-phase1-fixture"
 required-features = ["phase1-fixtures"]
+
+[[bin]]
+name = "gh-docs-phase2-fixture"
+required-features = ["phase2-fixtures"]

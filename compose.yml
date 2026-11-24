@@ -48,7 +48,19 @@ services:
     image: gh-docs-mcp-sync:${GH_DOCS_IMAGE_TAG:-phase0}
     build: {context: ., target: sync}
     user: "10002:10002"
-    environment: *db-client
+    mem_limit: "${SYNC_MEMORY_LIMIT:-6g}"
+    cpus: 4
+    environment:
+      <<: *db-client
+      GH_DOCS_SYNC_CONCURRENCY: "${GH_DOCS_SYNC_CONCURRENCY:-2}"
+      GH_DOCS_SYNC_QUOTA_BYTES: "${GH_DOCS_SYNC_QUOTA_BYTES:-8589934592}"
+    dns: ["${SYNC_DNS:-127.0.0.1}"]
+    tmpfs:
+      - /tmp:size=16m,nosuid,nodev,noexec,mode=1777
+      - /git-sync-scratch/1:size=1g,nr_inodes=8192,nosuid,nodev,noexec,uid=10002,gid=10002,mode=0700
+      - /git-sync-scratch/2:size=1g,nr_inodes=8192,nosuid,nodev,noexec,uid=10002,gid=10002,mode=0700
+      - /git-sync-scratch/3:size=1g,nr_inodes=8192,nosuid,nodev,noexec,uid=10002,gid=10002,mode=0700
+      - /git-sync-scratch/4:size=1g,nr_inodes=8192,nosuid,nodev,noexec,uid=10002,gid=10002,mode=0700
     extra_hosts:
       postgres.phase0.test: "${PG_WRITE_IP:?}"
     networks:

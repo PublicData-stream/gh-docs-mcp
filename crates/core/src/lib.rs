@@ -21,3 +21,4 @@ pub fn health_bind() -> Result<SocketAddr> {
     Ok(address)
 }
 pub mod git;
+pub mod git_manifest;

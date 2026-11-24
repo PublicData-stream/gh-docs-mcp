@@ -13,6 +13,5 @@ gh-docs-git = { path = "../git" }
 gh-docs-storage = { path = "../storage" }
 serde.workspace = true
 serde_json.workspace = true
-sha2.workspace = true
 tokio-postgres.workspace = true
 uuid.workspace = true

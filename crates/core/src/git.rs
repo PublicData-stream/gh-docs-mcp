@@ -73,7 +73,7 @@ impl FromStr for ObjectFormat {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Oid {
     Sha1([u8; 20]),
     Sha256([u8; 32]),

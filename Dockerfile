@@ -47,7 +47,8 @@ RUN --network=none \
     cargo build --workspace --bins --release --frozen \
     && mkdir /out \
     && cp /tmp/rust/target/release/gh-docs-serve /tmp/rust/target/release/gh-docs-sync \
-          /tmp/rust/target/release/gh-docs-feed /tmp/rust/target/release/gh-docs-git-reader /out/
+          /tmp/rust/target/release/gh-docs-feed /tmp/rust/target/release/gh-docs-git-reader \
+          /tmp/rust/target/release/gh-docs-git-sync /out/
 
 FROM docker.io/library/alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS runtime
 COPY LICENSE docs/RFC-MCP-DOCKER-LICENSE /usr/share/licenses/gh-docs-mcp/
@@ -62,8 +63,11 @@ USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/gh-docs-serve"]
 
 FROM runtime AS sync
-RUN apk add --no-cache git=2.54.1-r0 ca-certificates-bundle=20261020-r0
-COPY --from=app-build /out/gh-docs-sync /usr/local/bin/
+RUN apk add --no-cache ca-certificates-bundle=20261020-r0
+COPY --from=app-build /out/gh-docs-sync /out/gh-docs-git-sync /usr/local/bin/
+COPY --from=app-build /out/gh-docs-git-sync /usr/local/libexec/gh-docs-git/git-remote-ghdocs
+COPY --from=git-build /out/git /usr/local/bin/
+COPY --from=git-build /out/COPYING /usr/share/licenses/git/
 USER 10002:10002
 ENTRYPOINT ["/usr/local/bin/gh-docs-sync"]
 
@@ -85,5 +89,19 @@ COPY --from=phase1-fixture-build /out/gh-docs-phase1-fixture /usr/local/bin/
 
 FROM sync AS phase1-sync
 COPY --from=phase1-fixture-build /out/gh-docs-phase1-fixture /out/gh-docs-git-reader /usr/local/bin/
-COPY --from=git-build /out/git /usr/local/bin/
-COPY --from=git-build /out/COPYING /usr/share/licenses/git/
+
+FROM app-build AS phase2-fixture-build
+RUN --network=none \
+    --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/tmp/rust/target,sharing=locked \
+    cargo build --frozen --release -p gh-docs-mcp --features phase2-fixtures --bin gh-docs-phase2-fixture \
+    && cp /tmp/rust/target/release/gh-docs-phase2-fixture /out/
+
+FROM sync AS phase2-sync
+COPY --from=phase2-fixture-build /out/gh-docs-phase2-fixture /usr/local/bin/
+
+FROM runtime AS phase2-upstream
+RUN apk add --no-cache python3=3.14.10-r2 git=2.54.1-r0 git-daemon=2.54.1-r0
+COPY scripts/phase2/upstream.py /opt/upstream.py
+USER 10002:10002
+ENTRYPOINT ["python3", "-B", "/opt/upstream.py"]
