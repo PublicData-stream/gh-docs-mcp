@@ -177,3 +177,83 @@ The local transcripts are
 The disposable Compose projects, firewall tables, Minikube profiles, test
 image tags, and generated fixtures were removed. Live acquisition, ARM64,
 hosted CI, and physical power-loss durability were outside this qualification.
+
+## Phase 3 qualification
+
+The local Phase 3 gate passed on signed implementation revision
+`77fb9a4815a7c25309a025b3aac0f50e7c0f161a` on 2026-11-24 UTC. Compose ran
+on Linux amd64, kernel `7.0.0-44-generic`, rootful Docker Engine `29.10.0`,
+Compose `5.8.0`, and ext4-backed `/tmp`. The tools were Rust `1.100.0`,
+host Git `2.53.0`, image Git `2.54.1`, Python `3.14.4`, Node `26.13.1`,
+and pnpm `12.21.0`.
+
+| Gate | Observed | Result |
+| --- | --- | --- |
+| Offline Rust | Locked format, Clippy with warnings denied, workspace tests, and doc tests passed. | Pass |
+| A01–A04 | Rebuilt images passed the pinned MCP wire and TypeScript client probes, scoped credentials and TLS, network and mount isolation, filesystem fences and fsync, and Git and search confinement. Landlock reported ABI 8. | Pass |
+| A05–A06 | Fresh and repeated catalog migration, upgrade from Phase 0 and Phase 2, verified candidate and ref snapshot preservation, and role denials passed. The native reader matched both SHA-1 and SHA-256 fixture oracles. | Pass |
+| A07 and Phase 2 A08 | Bounded private HTTPS acquisition, malformed and interrupted transfers, scoped refs, revocation of an in-flight acquisition, and same-repository and global admission limits passed. The catalog kept private candidates unreadable. | Pass |
+| Phase 3 A08 | A malformed private pack failed preparation without changing the active pointer. A missing canonical pack blocked reads for its repository until exact bytes were restored and verified. Unknown paths and pack pairs were preserved for inspection. | Pass |
+| A09 | Process interruption at installation, ref and manifest flush, ready state, publication commit, retirement, and repack boundaries recovered idempotently. SQL backend termination before and after outbox insertion preserved the prior pointer. A committed event remained discoverable after the response was lost. Fixture-only acknowledgment was durable and idempotent. | Pass |
+| A10 | Concurrent active and retained generation reads, a second writer, a stale sequence, and rollback exercised the scope and fence checks. Publication and GC deferred while a reader held the repository fence. After PostgreSQL terminated the reader session, the filesystem fence remained held until the live Git child was reaped. | Pass |
+| A11 | Force-pushed and deleted refs remained available through the earlier retained generation. Retirement denied the stale generation while bytes remained. The three-generation and 24-hour protections held, and guarded GC reclaimed aged discarded objects while preserving shared and young objects. | Pass |
+| Minikube | A disposable rootless Docker profile used Minikube `1.39.0`, Kubernetes `1.37.0`, and containerd `2.3.4`. Both Git formats were published, verified by recovery, and read through the read-only canonical mount with serve credentials. | Pass |
+
+The SHA-1 and SHA-256 initial upstream commits were
+`eaeaffb1d30df005bad6f88f9051a2a96600785e` and
+`9e2f6cbaa30976edb601b8b994b3769e870890c6cf38d164440ada674f27ef52`.
+The Compose runs started at 17:35:53 UTC for Phase 0, 17:36:42 for Phase 1,
+17:31:42 for Phase 2, and 17:30:55 for Phase 3.
+
+### Rebuilt images and commands
+
+| Local image | Image ID |
+| --- | --- |
+| serve | `sha256:bb22124f2de976b9ecc2468019b8fd4e1c74c50adf6f44683f5ef7c750412d35` |
+| sync | `sha256:fca5c167c397bef2f927f533f5f15dea7dd7dcd64015c7068dad1b6fcba953bc` |
+| feed | `sha256:0e566770decaffba365282b3d0733b4e9f96c23c5cb94dc2c4eed3da2c017c61` |
+| Phase 1 fixture serve | `sha256:b02c04c19376e2987c3fa849e677529defdc25051ad08362d6e485182f93bffc` |
+| Phase 1 fixture sync | `sha256:d170d97bffbb6b31937313062cbd5c1f3da0b99da52780a23c6a37b7db1ab688` |
+| Phase 2 fixture sync | `sha256:c6185ecc5261570bc49dcdc1819ccab80b071949030f57721aabda2bd824cbd4` |
+| Phase 2 fixture upstream | `sha256:c7bcb27b24852eb155ab14f9a5860ccda3d2a82b1c26af90fb9aa4b9a40cbeb9` |
+| Phase 3 fixture serve | `sha256:944a4e4267145a4da69212643ebf25c812ae4da9f1f39a8030442f7b7ee68875` |
+| Phase 3 fixture sync | `sha256:98fd1e9e1f34f8723bba2c9713823553c3b59ca1a76ed34892e7bb7cf26e74be` |
+| PostgreSQL 19.0 | `sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f` |
+
+The [qualification procedure](publication.md#qualification) documents the
+Buildx targets. The final images were loaded locally with the tag below.
+
+~~~sh
+export CARGO_TARGET_DIR=/tmp/rust/target
+cargo fetch --locked
+scripts/phase0/check-rust.sh
+client_dir=$(scripts/phase0/prepare-client.sh)
+tag=phase3-verified-77fb9a4
+
+sudo -n python3 -B scripts/phase0/integration.py --skip-build --image-tag "$tag" \
+  --node "$(command -v node)" --client-dir "$client_dir"
+sudo -n python3 -B scripts/phase1/integration.py --image-tag "$tag" \
+  --node "$(command -v node)" --client-dir "$client_dir"
+sudo -n python3 -B scripts/phase2/integration.py --image-tag "$tag"
+sudo -n python3 -B scripts/phase3/integration.py --image-tag "$tag"
+python3 -B scripts/phase3/minikube.py \
+  --serve-image "gh-docs-phase3-serve:$tag" \
+  --sync-image "gh-docs-phase3-sync:$tag" \
+  --upstream-image "gh-docs-phase2-upstream:$tag" \
+  --postgres-image "gh-docs-phase3-postgres:$tag" \
+  --bootstrap-cache "$bootstrap_cache"
+~~~
+
+The local transcripts are `/tmp/ghdocs3-rust.log`,
+`/tmp/ghdocs3-build-verified.log`, and
+`/tmp/ghdocs3-verified-{phase0,phase1,phase2,phase3,minikube,cleanup}.log`.
+Preliminary probes reproduced two issues. Pinned Git emitted a reverse-index
+sidecar during repack, and the Phase 2 slot-saturation probe reached the
+repository advisory-key lookup before slot admission. The final run used
+explicit repack configuration and restored slot admission ordering. The
+disposable Compose projects and firewall tables, Minikube profiles, test
+image tags, generated fixtures, and SDK install directory were removed.
+
+These results qualify synthetic process-interruption recovery on the
+declared local profiles. Physical power-loss durability, live acquisition,
+ARM64, hosted CI, and production deployment remain outside this run.
