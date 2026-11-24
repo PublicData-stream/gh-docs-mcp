@@ -24,18 +24,28 @@ pub async fn migrate(client: &mut Client) -> Result<()> {
         )
         .await?
         .get(0);
-    if exists {
-        let version: i32 = transaction
-            .query_one("SELECT version FROM git_catalog.migrations", &[])
-            .await?
-            .get(0);
-        if version != 2 {
-            return Err("unsupported Git catalog migration version".into());
-        }
-    } else {
+    if !exists {
         transaction
             .batch_execute(include_str!("../../../migrations/0002_git_catalog.sql"))
             .await?;
+    }
+    let versions: Vec<i32> = transaction
+        .query(
+            "SELECT version FROM git_catalog.migrations ORDER BY version",
+            &[],
+        )
+        .await?
+        .iter()
+        .map(|row| row.get(0))
+        .collect();
+    match versions.as_slice() {
+        [2] => {
+            transaction
+                .batch_execute(include_str!("../../../migrations/0003_synchronization.sql"))
+                .await?
+        }
+        [2, 3] => (),
+        _ => return Err("unsupported Git catalog migration version".into()),
     }
     transaction.commit().await?;
     Ok(())

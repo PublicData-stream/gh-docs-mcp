@@ -98,10 +98,17 @@ def upgrade(tag):
         sql(old, "SET ROLE gh_docs_migrate; INSERT INTO foundation.probe VALUES (72, 'upgrade sentinel');")
         assert sql(old, f"SET ROLE gh_docs_migrate; BEGIN;\n{catalog}\nROLLBACK;\n"
                         "SELECT to_regnamespace('git_catalog') IS NULL;") == "t"
+        sql(old, f"SET ROLE gh_docs_migrate;\n{catalog}")
+        legacy_repo = "11111111-1111-4111-8111-111111111111"
+        legacy_source = "22222222-2222-4222-8222-222222222222"
+        sql(old, f"SET ROLE gh_docs_sync; SELECT git_catalog.register_fixture("
+            f"'{legacy_repo}','{legacy_source}','sha1','urn:gh-docs:fixture:{legacy_repo}',"
+            "ARRAY[convert_to('refs/heads/main','UTF8')]);")
         old.one_shot("migrate")
         old.one_shot("migrate")
         assert sql(old, "SELECT value FROM foundation.probe WHERE id = 72;") == "upgrade sentinel"
-        assert sql(old, "SELECT version FROM git_catalog.migrations;") == "2"
+        assert sql(old, f"SELECT canonical_identity FROM git_catalog.repository_sources WHERE source_id='{legacy_source}';") == f"urn:gh-docs:fixture:{legacy_repo}"
+        assert sql(old, "SELECT version FROM git_catalog.migrations ORDER BY version;").splitlines() == ["2", "3"]
     print("A05 Phase 0 upgrade, transactional rollback, and repeated migration passed", flush=True)
 
 
@@ -247,7 +254,7 @@ def invalid_store_inputs(stack):
 def fresh(args):
     with stack(args.image_tag, "fresh", fixtures=True) as current:
         current.start()
-        assert sql(current, "SELECT version FROM git_catalog.migrations;") == "2"
+        assert sql(current, "SELECT version FROM git_catalog.migrations ORDER BY version;").splitlines() == ["2", "3"]
         filesystem(current)
         for mode, service in [("read", "serve"), ("fail-setup", "serve"), ("register", "sync")]:
             print(role(current, service, mode, timeout=80).stdout, end="", flush=True)
