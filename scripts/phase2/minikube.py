@@ -67,7 +67,7 @@ def container(name, image, uid, command, mounts, memory="256Mi", cpu="1", env=No
     return spec
 
 
-def resources(root, sync, upstream, postgres):
+def resources(root, sync, upstream, postgres, serve=None):
     fixture = root / "fixture"
     prepare(fixture)
     archive = root / "fixture.tar.gz"
@@ -137,6 +137,33 @@ def resources(root, sync, upstream, postgres):
                                  ("migration-auth", "migrate"), ("sync-auth", "sync")]
     ]
     volumes.append({"name": "configuration", "configMap": {"name": "fixture-config", "defaultMode": 0o555}})
+    containers = [sync_container]
+    if serve:
+        # This local smoke shares an emptyDir for handoff; Docker Compose
+        # remains the role isolation and fault-injection qualification.
+        publish = [
+            f"gh-docs-sync --{cmd} --repository {repo} {extra}"
+            for repo, _ in REPOS.values()
+            for cmd, extra in (("prepare", "--generation 0"), ("publish", "--generation 0 --expect-sequence 0"),
+                               ("recover", ""))
+        ]
+        sync_container["command"][2] += "; " + "; ".join([*publish, "touch /handoff/published"])
+        sync_container["volumeMounts"].append(mount("handoff", "/handoff"))
+        oracle = [json.loads((fixture / f"{fmt}-oracle.json").read_text()) for fmt in REPOS]
+        reads = [
+            f"gh-docs-phase3-fixture read {repo} active {proof['initial']}"
+            for (repo, _), proof in zip(REPOS.values(), oracle, strict=True)
+        ]
+        serve_command = ["test ! -w /git-store", "test ! -r /git-store/.publication",
+                         "test ! -e /git-sync-private", *reads]
+        containers.append(container("read", serve, 10001, ["/bin/sh", "-ec",
+            "timeout 75 sh -ec 'while ! test -f /handoff/published; do sleep 1; done'; "
+            + "; ".join(serve_command)],
+            [mount("serve-auth", "/run/secrets", True), mount("handoff", "/handoff", True),
+             mount("canonical", "/git-store", True, "role")], env=db_client))
+        objects.append(secret("serve", {"db-ca.crt": ca, "db-password": passwords["serve-password"]}))
+        volumes.extend([{"name": "serve-auth", "secret": {"secretName": "serve"}},
+                        {"name": "handoff", "emptyDir": {}}])
     volumes.extend({"name": name, "emptyDir": {}} for name in
                    ("upstream-data", "pgdata", "postgres-run", "canonical", "private"))
     volumes.append({"name": "scratch", "emptyDir": {"medium": "Memory", "sizeLimit": "1Gi"}})
@@ -145,14 +172,14 @@ def resources(root, sync, upstream, postgres):
                "automountServiceAccountToken": False, "restartPolicy": "Never",
                "securityContext": {"runAsNonRoot": True, "fsGroup": 10002,
                                    "seccompProfile": {"type": "RuntimeDefault"}},
-               "initContainers": init, "containers": [sync_container], "volumes": volumes}}}}
+               "initContainers": init, "containers": containers, "volumes": volumes}}}}
     for item in [*objects[1:], job]:
         item["metadata"]["namespace"] = NAMESPACE
     return {"apiVersion": "v1", "kind": "List", "items": [*objects, job]}
 
 
-def smoke(args):
-    profile = f"ghdocs2-{secrets.token_hex(5)}"
+def smoke(args, serve=None):
+    profile = f"ghdocs{3 if serve else 2}-{secrets.token_hex(5)}"
     root = Path(tempfile.mkdtemp(prefix=f"{profile}-minikube-", dir="/tmp"))
     environment = {**os.environ, "MINIKUBE_HOME": str(root), "KUBECONFIG": str(root / "kubeconfig"),
                    "TMPDIR": str(root), "DOCKER_CONTEXT": "rootless", "MINIKUBE_IN_STYLE": "false"}
@@ -176,10 +203,13 @@ def smoke(args):
         # Keep an explicit local tag for the pinned PostgreSQL image in containerd.
         postgres = args.postgres_image
         bundle = root / "images.tar"
-        execute([*docker, "image", "inspect", "--format", "{{.Id}}", postgres, args.sync_image, args.upstream_image])
-        execute([*docker, "image", "save", "-o", bundle, postgres, args.sync_image, args.upstream_image], timeout=150)
+        images = [postgres, args.sync_image, args.upstream_image]
+        if serve:
+            images.append(serve)
+        execute([*docker, "image", "inspect", "--format", "{{.Id}}", *images])
+        execute([*docker, "image", "save", "-o", bundle, *images], timeout=150)
         manifest = root / "job.json"
-        manifest.write_text(json.dumps(resources(root, args.sync_image, args.upstream_image, postgres)))
+        manifest.write_text(json.dumps(resources(root, args.sync_image, args.upstream_image, postgres, serve)))
         started = True
         execute([*minikube, "start", "--driver=docker", "--container-runtime=containerd", "--nodes=1",
                  "--cpus=4", "--memory=6144", "--listen-address=127.0.0.1", "--install-addons=false",
@@ -195,12 +225,15 @@ def smoke(args):
             for name in ("unpack", "postgres", "upstream", "registration"):
                 execute([*scope, "logs", "job/private-fetch", "-c", name], check=False)
         execute([*scope, "logs", "job/private-fetch", "-c", "reconcile"], check=wait.returncode == 0)
+        if serve:
+            execute([*scope, "logs", "job/private-fetch", "-c", "read"], check=wait.returncode == 0)
         wait.check_returncode()
     finally:
         if started and execute([*minikube, "delete"], timeout=100, check=False).returncode:
             raise RuntimeError(f"cleanup pending for Minikube profile {profile} at {root}")
         shutil.rmtree(root)
-    print("Phase 2 Minikube HTTPS and private candidate smoke passed", flush=True)
+    print("Phase 3 Minikube publication and read-only serving smoke passed" if serve
+          else "Phase 2 Minikube HTTPS and private candidate smoke passed", flush=True)
 
 
 if __name__ == "__main__":

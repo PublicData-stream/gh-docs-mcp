@@ -413,7 +413,11 @@ async fn verify(
     })
 }
 
-fn pack_files(directory: &Path, format: ObjectFormat, limit: u64) -> Result<Vec<PathBuf>> {
+pub(crate) fn pack_files(
+    directory: &Path,
+    format: ObjectFormat,
+    limit: u64,
+) -> Result<Vec<PathBuf>> {
     let mut packs = Vec::new();
     let mut indexes = BTreeSet::new();
     let mut size = 0_u64;
@@ -691,7 +695,7 @@ pub fn copy_regular(from: &Path, to: &Path, limit: u64, flush: bool) -> Result<(
     Ok(())
 }
 
-fn pack_digest(path: &Path, limit: u64) -> Result<[u8; 32]> {
+pub(crate) fn pack_digest(path: &Path, limit: u64) -> Result<[u8; 32]> {
     let mut digest = Sha256::new();
     let mut input = open_regular(path)?.take(limit + 1);
     let mut count = 0;
@@ -710,7 +714,7 @@ fn pack_digest(path: &Path, limit: u64) -> Result<[u8; 32]> {
     Ok(digest.finalize().into())
 }
 
-fn read_manifest(path: &Path) -> Result<Vec<u8>> {
+pub(crate) fn read_manifest(path: &Path) -> Result<Vec<u8>> {
     let mut bytes = Vec::new();
     open_regular(path)?
         .take(16 * MIB + 1)

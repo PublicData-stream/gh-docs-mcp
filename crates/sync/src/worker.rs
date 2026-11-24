@@ -52,7 +52,7 @@ impl GitProcess {
         args: &[std::ffi::OsString],
         broker: Option<&BlockingStream>,
     ) -> Result<Self> {
-        Self::spawn_with_input(scratch, odb, args, broker, Stdio::null())
+        Self::spawn_with_input(scratch, odb, args, broker, Stdio::null(), false)
     }
 
     fn spawn_with_input(
@@ -61,12 +61,21 @@ impl GitProcess {
         args: &[std::ffi::OsString],
         broker: Option<&BlockingStream>,
         input: Stdio,
+        readonly: bool,
     ) -> Result<Self> {
-        validate_odb(odb)?;
+        if !readonly {
+            validate_odb(odb)?;
+        }
         let mut command = Command::new(WORKER);
         command
             .env_clear()
-            .arg(if broker.is_some() { "fetch" } else { "local" })
+            .arg(if readonly {
+                "publication-read"
+            } else if broker.is_some() {
+                "fetch"
+            } else {
+                "local"
+            })
             .arg(scratch)
             .arg(odb)
             .args(args)
@@ -247,7 +256,22 @@ pub async fn local_with_input(
     max: usize,
     input: Stdio,
 ) -> Result<Vec<u8>> {
-    let mut child = GitProcess::spawn_with_input(scratch, odb, args, None, input)?;
+    let mut child = GitProcess::spawn_with_input(scratch, odb, args, None, input, false)?;
+    let result = tokio::time::timeout(Duration::from_secs(180), child.output(max)).await;
+    child.stop();
+    result?
+}
+
+pub async fn publication_read(
+    repo: gh_docs_core::git::RepositoryId,
+    format: gh_docs_core::git::ObjectFormat,
+    args: &[std::ffi::OsString],
+    max: usize,
+    input: Stdio,
+) -> Result<Vec<u8>> {
+    let odb = gh_docs_git::store::validate_canonical(repo, format)?;
+    let mut child =
+        GitProcess::spawn_with_input(Path::new(format.name()), &odb, args, None, input, true)?;
     let result = tokio::time::timeout(Duration::from_secs(180), child.output(max)).await;
     child.stop();
     result?
@@ -259,7 +283,8 @@ pub fn launch(args: &[std::ffi::OsString]) -> Result<()> {
         return Err("invalid Git worker invocation".into());
     };
     let broker = mode == "fetch";
-    if (!broker && mode != "local") || command.is_empty() {
+    let readonly = mode == "publication-read";
+    if (!broker && !readonly && mode != "local") || command.is_empty() {
         return Err("invalid Git worker mode".into());
     }
     let parent = unsafe { libc::getppid() };
@@ -269,7 +294,34 @@ pub fn launch(args: &[std::ffi::OsString]) -> Result<()> {
     {
         return Err("Git worker lost its supervisor".into());
     }
-    gh_docs_git::sandbox::confine_sync(scratch.to_str().ok_or("invalid scratch path")?, broker)?;
+    if readonly {
+        let source = Path::new(odb);
+        let repo = source
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or("invalid canonical path")?
+            .parse()?;
+        let format = scratch
+            .to_str()
+            .ok_or("invalid canonical format")?
+            .parse()?;
+        if gh_docs_git::store::validate_canonical(repo, format)? != source
+            || !matches!(
+                command.first().and_then(|arg| arg.to_str()),
+                Some("fsck" | "cat-file")
+            )
+        {
+            return Err("invalid canonical validation command".into());
+        }
+        gh_docs_git::sandbox::confine_publication_validation(
+            source.to_str().ok_or("invalid canonical path")?,
+        )?;
+    } else {
+        gh_docs_git::sandbox::confine_sync(
+            scratch.to_str().ok_or("invalid scratch path")?,
+            broker,
+        )?;
+    }
     let mut git = std::process::Command::new(GIT);
     git.env_clear()
         .env("PATH", "/usr/local/bin")
@@ -277,6 +329,7 @@ pub fn launch(args: &[std::ffi::OsString]) -> Result<()> {
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .env("GIT_NO_REPLACE_OBJECTS", "1")
+        .env("GIT_NO_LAZY_FETCH", "1")
         .env("GIT_OPTIONAL_LOCKS", "0")
         .env("LC_ALL", "C")
         .current_dir(odb)
@@ -303,6 +356,10 @@ pub fn launch(args: &[std::ffi::OsString]) -> Result<()> {
             "fetch.writeCommitGraph=false",
             "-c",
             "core.logAllRefUpdates=false",
+            "-c",
+            "core.fsync=all",
+            "-c",
+            "core.fsyncMethod=fsync",
         ])
         .args(command);
     Err(git.exec().into())

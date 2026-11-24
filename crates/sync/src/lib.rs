@@ -3,17 +3,12 @@
 mod approval;
 mod candidate;
 mod private;
+pub mod publication;
 pub mod supervisor;
 mod upstream;
 mod worker;
 
-use std::{
-    collections::BTreeMap,
-    ffi::OsString,
-    fs,
-    path::Path,
-    time::{Duration, Instant},
-};
+use std::{collections::BTreeMap, ffi::OsString, fs, path::Path, time::Duration};
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{SecondsFormat, Utc};
@@ -21,7 +16,8 @@ use gh_docs_core::{
     Result,
     git::{ObjectFormat, Oid, RepositoryId},
 };
-use gh_docs_git::store::{self, LockMode, LockScope};
+use gh_docs_git::store::{self, LockScope};
+use gh_docs_storage::publication::writer_fence;
 use serde_json::{Value, json};
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -65,18 +61,17 @@ pub async fn reconcile(
     store::initialize()?;
     store::ensure_lock(repository, LockScope::Coordinator)?;
     store::ensure_lock(repository, LockScope::Repository)?;
-    let _fence = match store::lock(
-        repository,
-        LockScope::Coordinator,
-        LockMode::Exclusive,
-        Instant::now() + Duration::from_secs(2),
-    ) {
+    let _fence = match writer_fence(client, repository, LockScope::Coordinator).await {
         Ok(fence) => fence,
-        Err(error) if error.kind() == std::io::ErrorKind::TimedOut => {
+        Err(error)
+            if error
+                .downcast_ref::<std::io::Error>()
+                .is_some_and(|io| io.kind() == std::io::ErrorKind::TimedOut) =>
+        {
             println!("{}", json!({"outcome":"busy","reason":"repository_writer"}));
             return Err("repository synchronization is in progress".into());
         }
-        Err(error) => return Err(error.into()),
+        Err(error) => return Err(error),
     };
     let Some(slot) = private::Slot::acquire()? else {
         println!("{}", json!({"outcome":"busy","reason":"global_limit"}));

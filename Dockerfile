@@ -105,3 +105,16 @@ RUN apk add --no-cache python3=3.14.10-r2 git=2.54.1-r0 git-daemon=2.54.1-r0
 COPY scripts/phase2/upstream.py /opt/upstream.py
 USER 10002:10002
 ENTRYPOINT ["python3", "-B", "/opt/upstream.py"]
+
+FROM app-build AS phase3-fixture-build
+RUN --network=none \
+    --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/tmp/rust/target,sharing=locked \
+    cargo build --frozen --release -p gh-docs-mcp --features phase2-fixtures --bin gh-docs-phase3-fixture \
+    && cp /tmp/rust/target/release/gh-docs-phase3-fixture /out/
+
+FROM serve AS phase3-serve
+COPY --from=phase3-fixture-build /out/gh-docs-phase3-fixture /usr/local/bin/
+
+FROM phase2-sync AS phase3-sync
+COPY --from=phase3-fixture-build /out/gh-docs-phase3-fixture /usr/local/bin/

@@ -37,14 +37,7 @@ impl Slot {
             JOB_RESERVATION,
             8 * GIB,
         )?;
-        match fs::create_dir(LOCKS) {
-            Ok(()) => File::open("/git-sync-private")?.sync_all()?,
-            Err(error) if error.kind() == io::ErrorKind::AlreadyExists => (),
-            Err(error) => return Err(error.into()),
-        }
-        if !fs::symlink_metadata(LOCKS)?.is_dir() {
-            return Err("invalid sync lock directory".into());
-        }
+        ensure_locks()?;
         for slot in 1..=concurrency {
             if let Some(lock) = lock(&format!("slot-{slot}"), true)? {
                 let root = Path::new(SCRATCH).join(slot.to_string());
@@ -143,6 +136,22 @@ fn lock(name: &str, nonblocking: bool) -> Result<Option<File>> {
         }
         return Err(error.into());
     }
+}
+
+pub fn ensure_locks() -> Result<()> {
+    match fs::create_dir(LOCKS) {
+        Ok(()) => File::open("/git-sync-private")?.sync_all()?,
+        Err(error) if error.kind() == io::ErrorKind::AlreadyExists => (),
+        Err(error) => return Err(error.into()),
+    }
+    if !fs::symlink_metadata(LOCKS)?.is_dir() {
+        return Err("invalid sync lock directory".into());
+    }
+    Ok(())
+}
+
+pub fn publication_lock() -> Result<File> {
+    lock("publication", true)?.ok_or_else(|| "canonical storage admission busy".into())
 }
 
 pub fn quota_lock() -> Result<File> {

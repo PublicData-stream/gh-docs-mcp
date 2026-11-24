@@ -103,6 +103,10 @@ Use the Phase 2 migrator after applying migration `0003`. Roll back the
 application binaries with the additive schema in place. Restore a coordinated
 database and private-store snapshot to roll back the schema.
 
+A verified HTTPS candidate can be installed and published through the
+[Phase 3 operator workflow](publication.md). Reconciliation continues to stop
+at private verification.
+
 ## Qualification
 
 Build uniquely tagged local images for `serve`, `sync`, `feed`,

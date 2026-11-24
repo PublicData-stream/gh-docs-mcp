@@ -1,6 +1,7 @@
 use gh_docs_core::Result;
 use gh_docs_mcp::{health, health_listener};
 use gh_docs_storage::connect;
+use gh_docs_sync::{publication, supervisor};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -48,6 +49,37 @@ async fn main() -> Result<()> {
         drop(client);
         driver.await?;
         return result;
+    }
+    let supervised = args.first().is_some_and(|flag| flag == supervisor::CHILD);
+    let command_args = if supervised { &args[1..] } else { &args };
+    if let [flag, selector, repository, rest @ ..] = command_args
+        && selector == "--repository"
+        && let Some(command) = publication::Command::parse(flag, rest)?
+    {
+        let status = matches!(command, publication::Command::Status(_));
+        if !status && !supervised {
+            if !supervisor::run(&args).await?.success() {
+                return Err("publication command failed".into());
+            }
+            return Ok(());
+        }
+        let (client, mut driver) = connect("gh_docs_sync").await?;
+        let repo = repository.parse()?;
+        let fault = publication::Fault::default();
+        let result = if status {
+            publication::run(&client, repo, command, &fault).await
+        } else {
+            let mut lifeline = supervisor::child_lifeline()?;
+            tokio::select! {
+                outcome = publication::run(&client, repo, command, &fault) => outcome,
+                _ = supervisor::until_lost(&mut lifeline) => Err("publication supervisor disconnected".into()),
+                _ = &mut driver => return Err("publication database connection closed".into()),
+            }
+        };
+        drop(client);
+        driver.await?;
+        println!("{}", result?);
+        return Ok(());
     }
     let (client, driver) = connect("gh_docs_sync").await?;
     match args.as_slice() {

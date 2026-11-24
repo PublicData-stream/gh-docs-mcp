@@ -29,3 +29,7 @@ required-features = ["phase1-fixtures"]
 [[bin]]
 name = "gh-docs-phase2-fixture"
 required-features = ["phase2-fixtures"]
+
+[[bin]]
+name = "gh-docs-phase3-fixture"
+required-features = ["phase2-fixtures"]

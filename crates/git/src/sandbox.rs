@@ -483,6 +483,14 @@ fn install_seccomp(sync: bool) -> io::Result<()> {
 }
 
 pub fn confine_sync(scratch: &str, broker: bool) -> io::Result<()> {
+    confine_sync_scope(scratch, broker, true)
+}
+
+pub fn confine_publication_validation(odb: &str) -> io::Result<()> {
+    confine_sync_scope(odb, false, false)
+}
+
+fn confine_sync_scope(scratch: &str, broker: bool, write: bool) -> io::Result<()> {
     const EXECUTE: u64 = 1;
     const WRITE_FILE: u64 = 1 << 1;
     const READ_FILE: u64 = 1 << 2;
@@ -522,15 +530,11 @@ pub fn confine_sync(scratch: &str, broker: bool) -> io::Result<()> {
     add_landlock_rule(&ruleset, "/dev/null", READ_FILE | WRITE_FILE)?;
     // Scratch can contain regular files and directories. Deny executable,
     // symlink, socket and special-file creation even within the slot.
-    let scratch_rights = READ_FILE
-        | WRITE_FILE
-        | READ_DIR
-        | (1 << 4)
-        | (1 << 5)
-        | (1 << 7)
-        | (1 << 8)
-        | (1 << 13)
-        | (1 << 14);
+    let mut scratch_rights = READ_FILE | READ_DIR;
+    if write {
+        scratch_rights |=
+            WRITE_FILE | (1 << 4) | (1 << 5) | (1 << 7) | (1 << 8) | (1 << 13) | (1 << 14);
+    }
     add_landlock_rule(&ruleset, scratch, scratch_rights)?;
     checked(unsafe { libc::syscall(libc::SYS_landlock_restrict_self, ruleset.as_raw_fd(), 0) })?;
     drop(ruleset);
