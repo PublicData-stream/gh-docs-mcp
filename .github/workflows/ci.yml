@@ -1,0 +1,24 @@
+name: Phase 0 Rust checks
+
+on: [push, pull_request, workflow_dispatch]
+
+permissions:
+  contents: read
+
+jobs:
+  rust:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    env:
+      CARGO_TARGET_DIR: /tmp/rust/target
+      TMPDIR: /tmp
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install pinned toolchain and fetch locked inputs
+        run: |
+          rustup toolchain install --no-self-update
+          cargo fetch --locked
+      - name: Check offline
+        run: scripts/phase0/check-rust.sh

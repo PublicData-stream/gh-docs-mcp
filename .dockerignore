@@ -1,0 +1,10 @@
+.git
+.github
+.agents
+.aws
+.codex
+target
+**/node_modules
+**/*.pem
+**/*.key
+.env

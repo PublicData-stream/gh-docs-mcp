@@ -1,0 +1,208 @@
+x-hardening: &hardening
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  read_only: true
+  init: true
+  pids_limit: 128
+  mem_limit: 256m
+  cpus: 1
+  tmpfs:
+    - /tmp:size=16m,nosuid,nodev,noexec,mode=1777
+  dns: [127.0.0.1]
+  logging:
+    driver: local
+    options: {max-size: 5m, max-file: "2"}
+
+x-db-client: &db-client
+  DB_HOST: postgres.phase0.test
+  DB_CA_FILE: /run/secrets/db-ca.crt
+  DB_PASSWORD_FILE: /run/secrets/db-password
+  HEALTH_BIND: "127.0.0.1:8081"
+
+x-db-read-hosts: &db-read-hosts
+  postgres.phase0.test: "${PG_READ_IP:?}"
+  wrong-db.phase0.test: "${PG_READ_IP:?}"
+
+services:
+  serve:
+    <<: *hardening
+    image: gh-docs-mcp-serve:${GH_DOCS_IMAGE_TAG:-phase0}
+    build: {context: ., target: serve}
+    user: "10001:10001"
+    environment:
+      <<: *db-client
+      MCP_BIND: "${SERVE_INGRESS_IP:?}:8080"
+      MCP_HOST: "127.0.0.1:${PROXY_PORT:?}"
+      MCP_ORIGIN: "https://127.0.0.1:${PROXY_PORT:?}"
+    extra_hosts: *db-read-hosts
+    networks:
+      ingress: {ipv4_address: "${SERVE_INGRESS_IP:?}", ipv6_address: "${SERVE_INGRESS_V6:?}"}
+      db_read: {ipv4_address: "${SERVE_READ_IP:?}"}
+      sync_notify: {ipv4_address: "${SERVE_NOTIFY_IP:?}"}
+    volumes:
+      - ${FIXTURES:?}/store:/git-store:ro
+      - ${FIXTURES:?}/serve:/run/secrets:ro
+
+  sync:
+    <<: *hardening
+    image: gh-docs-mcp-sync:${GH_DOCS_IMAGE_TAG:-phase0}
+    build: {context: ., target: sync}
+    user: "10002:10002"
+    environment: *db-client
+    extra_hosts:
+      postgres.phase0.test: "${PG_WRITE_IP:?}"
+    networks:
+      db_write: {ipv4_address: "${SYNC_WRITE_IP:?}"}
+      feed_control: {ipv4_address: "${SYNC_CONTROL_IP:?}"}
+      sync_notify: {ipv4_address: "${SYNC_NOTIFY_IP:?}"}
+      sync_egress: {ipv4_address: "${SYNC_EGRESS_IP:?}", ipv6_address: "${SYNC_EGRESS_V6:?}", gw_priority: 1}
+    volumes:
+      - ${FIXTURES:?}/store:/git-store:rw
+      - ${FIXTURES:?}/staging:/git-sync-private:rw
+      - ${FIXTURES:?}/sync:/run/secrets:ro
+
+  feed:
+    <<: *hardening
+    image: gh-docs-mcp-feed:${GH_DOCS_IMAGE_TAG:-phase0}
+    build: {context: ., target: feed}
+    profiles: [feed]
+    user: "10003:10003"
+    environment: {HEALTH_BIND: "127.0.0.1:8081"}
+    networks:
+      feed_control: {ipv4_address: "${FEED_CONTROL_IP:?}"}
+      feed_egress: {ipv4_address: "${FEED_EGRESS_IP:?}", ipv6_address: "${FEED_EGRESS_V6:?}", gw_priority: 1}
+    volumes:
+      - ${FIXTURES:?}/feed:/run/secrets:ro
+
+  postgres:
+    <<: *hardening
+    image: docker.io/library/postgres:19.0-alpine3.24@sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f
+    user: "70:70"
+    mem_limit: 384m
+    shm_size: 48m
+    environment:
+      PGDATA: /var/lib/postgresql/19/docker
+      POSTGRES_DB: gh_docs
+      POSTGRES_PASSWORD_FILE: /run/secrets/admin-password
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale-provider=icu --icu-locale=und --auth-local=trust --auth-host=scram-sha-256"
+    command:
+      - postgres
+      - -c
+      - "listen_addresses=${PG_READ_IP:?},${PG_WRITE_IP:?}"
+      - -c
+      - ssl=on
+      - -c
+      - ssl_cert_file=/run/secrets/server.crt
+      - -c
+      - ssl_key_file=/run/secrets/server.key
+      - -c
+      - hba_file=/run/secrets/pg_hba.conf
+      - -c
+      - password_encryption=scram-sha-256
+    healthcheck:
+      # The temporary initdb server has TCP disabled.
+      test: [CMD, pg_isready, -h, "${PG_READ_IP:?}", -d, gh_docs, -U, postgres]
+      interval: 2s
+      timeout: 2s
+      retries: 20
+    networks:
+      db_read: {ipv4_address: "${PG_READ_IP:?}"}
+      db_write: {ipv4_address: "${PG_WRITE_IP:?}"}
+    volumes:
+      - ${FIXTURES:?}/pgdata:/var/lib/postgresql
+      - ${FIXTURES:?}/postgres:/run/secrets:ro
+      - ./scripts/phase0/bootstrap-db.sh:/docker-entrypoint-initdb.d/01-roles.sh:ro
+    tmpfs:
+      - /tmp:size=16m,nosuid,nodev,noexec,mode=1777
+      - /run/postgresql:size=2m,nosuid,nodev,noexec,uid=70,gid=70,mode=0770
+
+  migrate:
+    <<: *hardening
+    image: gh-docs-mcp-sync:${GH_DOCS_IMAGE_TAG:-phase0}
+    profiles: [operator]
+    user: "10004:10004"
+    command: ["--migrate"]
+    environment: *db-client
+    extra_hosts:
+      postgres.phase0.test: "${PG_WRITE_IP:?}"
+    networks:
+      db_write: {ipv4_address: "${MIGRATE_IP:?}"}
+    volumes:
+      - ${FIXTURES:?}/migrate:/run/secrets:ro
+
+  volume-admin:
+    <<: *hardening
+    image: docker.io/library/alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
+    profiles: [operator]
+    user: "0:0"
+    cap_add: [CHOWN, FOWNER]
+    network_mode: none
+    entrypoint: ["/bin/sh", "-ec"]
+    command:
+      - |
+        for path in /git-store /git-sync-private /pgdata; do
+          test -d "$$path"
+        done
+        chmod 0755 /git-store
+        chmod 0700 /git-sync-private /pgdata
+        chown 10002:10002 /git-store /git-sync-private
+        chown 70:70 /pgdata
+    volumes:
+      - ${FIXTURES:?}/store:/git-store
+      - ${FIXTURES:?}/staging:/git-sync-private
+      - ${FIXTURES:?}/pgdata:/pgdata
+
+  proxy:
+    <<: *hardening
+    image: &proxy-image docker.io/library/nginx:1.30.0-alpine@sha256:0272e4604ed93c1792f03695a033a6e8546840f86e0de20a884bb17d2c924883
+    user: "101:101"
+    entrypoint: [nginx, -c, /run/secrets/nginx.conf, -g, "daemon off;"]
+    ports:
+      - "127.0.0.1:${PROXY_PORT:?}:8443"
+    networks:
+      ingress: {ipv4_address: "${PROXY_IP:?}", ipv6_address: "${PROXY_V6:?}"}
+    volumes:
+      - ${FIXTURES:?}/proxy:/run/secrets:ro
+
+  sink:
+    <<: *hardening
+    image: *proxy-image
+    profiles: [fixtures]
+    user: "101:101"
+    entrypoint: [nginx, -c, /run/sink/nginx.conf, -g, "daemon off;"]
+    networks:
+      ingress: {ipv4_address: "${SINK_INGRESS_IP:?}", ipv6_address: "${SINK_INGRESS_V6:?}"}
+      sync_egress: {ipv4_address: "${SINK_SYNC_IP:?}", ipv6_address: "${SINK_SYNC_V6:?}"}
+      feed_egress: {ipv4_address: "${SINK_FEED_IP:?}", ipv6_address: "${SINK_FEED_V6:?}"}
+    volumes:
+      - ${FIXTURES:?}/sink:/run/sink:ro
+
+networks:
+  ingress:
+    driver_opts: {com.docker.network.bridge.name: "${INGRESS_BRIDGE:?}"}
+    enable_ipv6: true
+    ipam: {config: [{subnet: "${INGRESS_CIDR:?}"}, {subnet: "${INGRESS_CIDR_V6:?}"}]}
+  db_read:
+    driver_opts: {com.docker.network.bridge.name: "${READ_BRIDGE:?}"}
+    internal: true
+    ipam: {config: [{subnet: "${READ_CIDR:?}"}]}
+  db_write:
+    driver_opts: {com.docker.network.bridge.name: "${WRITE_BRIDGE:?}"}
+    internal: true
+    ipam: {config: [{subnet: "${WRITE_CIDR:?}"}]}
+  feed_control:
+    driver_opts: {com.docker.network.bridge.name: "${CONTROL_BRIDGE:?}"}
+    internal: true
+    ipam: {config: [{subnet: "${CONTROL_CIDR:?}"}]}
+  sync_notify:
+    driver_opts: {com.docker.network.bridge.name: "${NOTIFY_BRIDGE:?}"}
+    internal: true
+    ipam: {config: [{subnet: "${NOTIFY_CIDR:?}"}]}
+  sync_egress:
+    driver_opts: {com.docker.network.bridge.name: "${SYNC_BRIDGE:?}"}
+    enable_ipv6: true
+    ipam: {config: [{subnet: "${SYNC_CIDR:?}"}, {subnet: "${SYNC_CIDR_V6:?}"}]}
+  feed_egress:
+    driver_opts: {com.docker.network.bridge.name: "${FEED_BRIDGE:?}"}
+    enable_ipv6: true
+    ipam: {config: [{subnet: "${FEED_CIDR:?}"}, {subnet: "${FEED_CIDR_V6:?}"}]}
