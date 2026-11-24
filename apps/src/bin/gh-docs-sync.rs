@@ -24,6 +24,7 @@ async fn main() -> Result<()> {
         _ => return Err("invalid sync arguments".into()),
     }
     gh_docs_storage::verify_fixture(&client).await?;
+    gh_docs_git::store::initialize()?;
     let health = health(health_listener().await?);
     tokio::select! {
         outcome = health => outcome?,

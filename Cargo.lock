@@ -434,7 +434,9 @@ dependencies = [
 name = "gh-docs-git"
 version = "0.1.0"
 dependencies = [
+ "gh-docs-core",
  "libc",
+ "uuid",
 ]
 
 [[package]]
@@ -446,6 +448,7 @@ dependencies = [
  "gh-docs-git",
  "gh-docs-search",
  "gh-docs-storage",
+ "gh-docs-test-support",
  "rmcp",
  "serde_json",
  "tokio",
@@ -478,6 +481,17 @@ version = "0.1.0"
 [[package]]
 name = "gh-docs-test-support"
 version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "gh-docs-core",
+ "gh-docs-git",
+ "gh-docs-storage",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio-postgres",
+ "uuid",
+]
 
 [[package]]
 name = "hashbrown"

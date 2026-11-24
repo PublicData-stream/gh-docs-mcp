@@ -17,7 +17,7 @@ const ALLOWED: &str = "/git-store/fixture.txt";
 const SECRET: &str = "/run/secrets/db-password";
 const SCRATCH: &str = "/tmp/phase0-denied";
 const RG: &str = "/usr/local/bin/rg";
-const GIT: &str = "/usr/local/bin/git";
+pub(crate) const GIT: &str = "/usr/local/bin/git";
 const SELECTED: &str = "/git-store/repositories/selected.git";
 const UNRELATED: &str = "/git-store/repositories/unrelated.git/HEAD";
 const SELECTED_HEAD: &str = "/git-store/repositories/selected.git/HEAD";
@@ -67,7 +67,12 @@ pub fn probe(profile: Profile, force_failure: bool) -> io::Result<()> {
     let inherited_fd = TcpStream::connect(address)?.into_raw_fd();
     let listening_fd = listener.into_raw_fd();
 
-    let abi = confine(profile, force_failure)
+    let repository = if matches!(profile, Profile::Git) {
+        Some(File::open(SELECTED)?)
+    } else {
+        None
+    };
+    let abi = confine(profile, repository, force_failure)
         .map_err(|error| io::Error::other(format!("sandbox_unavailable: {error}")))?;
     for fd in [inherited_fd, listening_fd] {
         // SAFETY: F_GETFD only queries the descriptor number.
@@ -136,12 +141,17 @@ pub fn probe(profile: Profile, force_failure: bool) -> io::Result<()> {
     }
 }
 
-fn confine(profile: Profile, force_failure: bool) -> io::Result<libc::c_long> {
+pub(crate) fn confine(
+    profile: Profile,
+    repository: Option<File>,
+    force_failure: bool,
+) -> io::Result<libc::c_long> {
     std::env::set_current_dir("/")?;
+    no_new_privileges()?;
+    let abi = install_landlock(profile, repository.as_ref(), force_failure)?;
+    drop(repository);
     // SAFETY: the dedicated helper only needs stdin, stdout and stderr.
     checked(unsafe { libc::syscall(libc::SYS_close_range, 3_u32, u32::MAX, 0_u32) })?;
-    no_new_privileges()?;
-    let abi = install_landlock(profile, force_failure)?;
     set_limit(libc::RLIMIT_CPU, CPU_SECONDS as libc::rlim_t)?;
     set_limit(libc::RLIMIT_AS, 256 * 1024 * 1024)?;
     set_limit(libc::RLIMIT_FSIZE, 0)?;
@@ -222,7 +232,11 @@ struct PathBeneath {
     parent_fd: i32,
 }
 
-fn install_landlock(profile: Profile, force_failure: bool) -> io::Result<libc::c_long> {
+fn install_landlock(
+    profile: Profile,
+    repository: Option<&File>,
+    force_failure: bool,
+) -> io::Result<libc::c_long> {
     const EXECUTE: u64 = 1 << 0;
     const WRITE_FILE: u64 = 1 << 1;
     const READ_FILE: u64 = 1 << 2;
@@ -257,7 +271,8 @@ fn install_landlock(profile: Profile, force_failure: bool) -> io::Result<libc::c
     let ruleset = unsafe { File::from_raw_fd(ruleset as i32) };
     add_landlock_rule(&ruleset, profile.executable(), READ_FILE | EXECUTE)?;
     if matches!(profile, Profile::Git) {
-        add_landlock_rule(&ruleset, SELECTED, READ_FILE | READ_DIR)?;
+        let repository = repository.ok_or_else(|| io::Error::other("missing Git sandbox root"))?;
+        add_landlock_anchor(&ruleset, repository, READ_FILE | READ_DIR)?;
         // Git opens this exact device O_RDWR while sanitizing stdio.
         add_landlock_rule(&ruleset, "/dev/null", READ_FILE | WRITE_FILE)?;
     }
@@ -286,6 +301,10 @@ fn add_landlock_rule(ruleset: &File, path: &str, access: u64) -> io::Result<()> 
     )?;
     // SAFETY: this is a fresh descriptor returned by open above.
     let anchor = unsafe { File::from_raw_fd(fd as i32) };
+    add_landlock_anchor(ruleset, &anchor, access)
+}
+
+fn add_landlock_anchor(ruleset: &File, anchor: &File, access: u64) -> io::Result<()> {
     let rule = PathBeneath {
         allowed_access: access,
         parent_fd: anchor.as_raw_fd(),

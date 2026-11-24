@@ -47,13 +47,13 @@ RUN --network=none \
     cargo build --workspace --bins --release --frozen \
     && mkdir /out \
     && cp /tmp/rust/target/release/gh-docs-serve /tmp/rust/target/release/gh-docs-sync \
-          /tmp/rust/target/release/gh-docs-feed /out/
+          /tmp/rust/target/release/gh-docs-feed /tmp/rust/target/release/gh-docs-git-reader /out/
 
 FROM docker.io/library/alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS runtime
 COPY LICENSE docs/RFC-MCP-DOCKER-LICENSE /usr/share/licenses/gh-docs-mcp/
 
 FROM runtime AS serve
-COPY --from=app-build /out/gh-docs-serve /usr/local/bin/
+COPY --from=app-build /out/gh-docs-serve /out/gh-docs-git-reader /usr/local/bin/
 COPY --from=git-build /out/git /usr/local/bin/
 COPY --from=git-build /out/COPYING /usr/share/licenses/git/
 COPY --from=ripgrep-build /out/rg /usr/local/bin/
@@ -72,3 +72,18 @@ RUN apk add --no-cache ca-certificates-bundle=20261020-r0
 COPY --from=app-build /out/gh-docs-feed /usr/local/bin/
 USER 10003:10003
 ENTRYPOINT ["/usr/local/bin/gh-docs-feed"]
+
+FROM app-build AS phase1-fixture-build
+RUN --network=none \
+    --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/tmp/rust/target,sharing=locked \
+    cargo build --frozen --release -p gh-docs-mcp --features phase1-fixtures --bin gh-docs-phase1-fixture \
+    && cp /tmp/rust/target/release/gh-docs-phase1-fixture /out/
+
+FROM serve AS phase1-serve
+COPY --from=phase1-fixture-build /out/gh-docs-phase1-fixture /usr/local/bin/
+
+FROM sync AS phase1-sync
+COPY --from=phase1-fixture-build /out/gh-docs-phase1-fixture /out/gh-docs-git-reader /usr/local/bin/
+COPY --from=git-build /out/git /usr/local/bin/
+COPY --from=git-build /out/COPYING /usr/share/licenses/git/

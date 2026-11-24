@@ -331,7 +331,10 @@ def main():
     parser.add_argument("--client-dir", type=Path, required=True, help="prepared TypeScript fixture under /tmp")
     parser.add_argument("--node", type=Path, required=True, help="absolute path to the pinned Node runtime")
     parser.add_argument("--skip-build", action="store_true", help="reuse already rebuilt, pinned local images")
+    parser.add_argument("--image-tag", default="phase0", help="local image tag when using --skip-build")
     args = parser.parse_args()
+    if args.image_tag != "phase0" and not args.skip_build:
+        parser.error("--image-tag requires --skip-build")
     if not __debug__:
         parser.error("assertions must be enabled for qualification")
     if os.geteuid() != 0 or int(os.environ.get("SUDO_UID", "0")) == 0:
@@ -350,7 +353,7 @@ def main():
     node_version = run([args.node, "--version"]).stdout.strip()
     assert node_version == "v26.13.1", node_version
     project = "ghdocs0-" + secrets.token_hex(5)
-    image_tag = "phase0" if args.skip_build else project
+    image_tag = args.image_tag if args.skip_build else project
     table = project.replace("-", "_")
     root = Path(tempfile.mkdtemp(prefix=f"{project}-", dir="/tmp"))
     stack, installed, built_images = None, False, []

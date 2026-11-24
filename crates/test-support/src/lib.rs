@@ -1,1 +1,4 @@
-//! Shared synthetic fixture support belongs here as later phases add fixtures.
+//! Shared synthetic fixtures and qualification drivers.
+
+mod manifest;
+pub mod phase1;

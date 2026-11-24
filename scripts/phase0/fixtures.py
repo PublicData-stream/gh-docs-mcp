@@ -185,6 +185,7 @@ def prepare(root):
     """)
     repos = root / "store/repositories"
     repos.mkdir(mode=0o755)
+    os.chown(repos, uids["sync"], uids["sync"])
     for name, object_format in [("selected", "sha1"), ("unrelated", "sha1"), ("sha256", "sha256")]:
         commit = make_git(repos / f"{name}.git", object_format)
         print(f"fixture {name} {object_format} {commit}", flush=True)

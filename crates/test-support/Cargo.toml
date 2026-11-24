@@ -5,3 +5,14 @@ edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
+
+[dependencies]
+base64.workspace = true
+gh-docs-core = { path = "../core" }
+gh-docs-git = { path = "../git" }
+gh-docs-storage = { path = "../storage" }
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+tokio-postgres.workspace = true
+uuid.workspace = true
