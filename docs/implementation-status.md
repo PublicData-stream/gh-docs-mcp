@@ -111,3 +111,69 @@ The disposable Compose projects, their firewall tables, Minikube profiles,
 fixture directories, and test image tags were removed. SHA-256 fetch and
 live acquisition remain later-phase gates. Hosted CI, ARM64, and production
 deployment were outside this run.
+
+## Phase 2 qualification
+
+Local tests used signed implementation commit
+`53f500ce2f5fbda3b4e8a042b7be25e0c1946dfc` on 2026-11-24 UTC. The host
+profile was Linux amd64, kernel `7.0.0-44-generic`, ext4-backed `/tmp`,
+Docker Engine `29.10.0`, and Compose `5.8.0`. The tools were Rust
+`1.100.0`, host Git `2.53.0`, image Git `2.54.1`, Python `3.14.4`,
+Node `26.13.1`, and pnpm `12.21.0`.
+
+| Gate | Observed | Result |
+| --- | --- | --- |
+| Offline Rust | Locked format, Clippy with warnings denied, workspace tests, and doc tests passed. The Phase 1 manifest golden vector still passed with the shared encoder. | Pass |
+| A01–A04 | Rebuilt role images passed the pinned MCP wire and SDK probes, role and TLS checks, effective IPv4 and IPv6 network controls, mount isolation, and reader/search confinement. The host reported Landlock ABI 8. | Pass |
+| A05–A06 | Fresh catalog migration, Phase 1 upgrade with fixture preservation, repeat migration, and scoped grants passed. The confined reader matched the object and raw byte oracle for both formats. | Pass |
+| A07 | Synthetic plain HTTP and verified HTTPS produced full-closure SHA-1 and SHA-256 candidates. The probes checked ref policy, force pushes, tag changes, deletions, byte identity, reuse, no-ops, confinement, wrong CA, private destination denial, redirects, revocation, and concurrent admission. | Pass |
+| A08, Phase 2 | Malformed and interrupted transfers, upstream restart, download and pack size, deadline, and private quota failures preserved usable candidates. Corrupt-baseline fallback reproduced the logical digest. Abrupt exit before and after the catalog commit exercised quarantine and retirement recovery. The active pointers and outbox stayed empty. | Pass |
+| Minikube | Both the Phase 1 reader regression and Phase 2 HTTPS private candidate smoke passed on Minikube `1.39.0`, rootless Docker `29.10.0`, Kubernetes `1.37.0`, and containerd `2.3.4`. The Phase 2 Job verified both Git formats and denied worker network, credential, and unrelated filesystem access. | Pass |
+
+The SHA-1 fixture received 395,441 bytes on the initial acquisition and
+1,891 bytes on the subsequent update with a reverified baseline. The no-op
+received 1,429 bytes and preserved the logical digest and generation. The
+initial SHA-256 fixture received 395,907 bytes. These are synthetic transfer
+measurements. Each initial candidate contained seven native objects.
+
+### Images and commands
+
+| Local image | Image ID |
+| --- | --- |
+| serve | `sha256:15ced0423cececd0c85c758acf4958b6f735b4d17fb192afc31ba8d291697a41` |
+| sync | `sha256:751cdf8588b82ecf142c1265e25ae84620b9026c0400e6a7ab81b36197408c18` |
+| feed | `sha256:9aedeb2da70facee1f078e867cce8b64347612600c3e8fa063ddd7a29fb20176` |
+| Phase 1 fixture serve | `sha256:5b83053d5c75bf6de916a76f5988cf8b2d9120b85325ab7a50f202991c1ecf30` |
+| Phase 1 fixture sync | `sha256:20e7df45c6566d4bd79207fd238138ddc4e2fac2a07db0e69244715d1474fd1c` |
+| Phase 2 fixture sync | `sha256:70bb7f7fc2fc8bcaf3153e7068526122502cb0c0deecfaa20357090a7cc64d63` |
+| Phase 2 fixture upstream | `sha256:edb35c73e6c47dfd59a387799eadfe43d03442fc97549567b164592699367d24` |
+| PostgreSQL 19.0 | `sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f` |
+
+The Compose runs began at 16:37:42, 16:39:35, and 16:37:46 UTC for Phases 0,
+1, and 2, respectively. Buildx loaded each amd64 image with the
+`phase2-qualification` tag. A separate `nft --check` validated syntax for
+the generated IPv4 and IPv6 HTTPS allowances and scoped DNS allowance.
+
+~~~sh
+export CARGO_TARGET_DIR=/tmp/rust/target
+cargo fetch --locked
+scripts/phase0/check-rust.sh
+client_dir=$(scripts/phase0/prepare-client.sh)
+tag=phase2-qualification
+sudo -n python3 -B scripts/phase0/integration.py --skip-build --image-tag "$tag" \
+  --node "$(command -v node)" --client-dir "$client_dir"
+sudo -n python3 -B scripts/phase1/integration.py --image-tag "$tag" \
+  --node "$(command -v node)" --client-dir "$client_dir"
+sudo -n python3 -B scripts/phase2/integration.py --image-tag "$tag"
+python3 -B scripts/phase1/minikube.py --serve-image "gh-docs-phase1-serve:$tag" \
+  --docker-context rootless --bootstrap-cache "$bootstrap_cache"
+python3 -B scripts/phase2/minikube.py --sync-image "gh-docs-phase2-sync:$tag" \
+  --upstream-image "gh-docs-phase2-upstream:$tag" \
+  --postgres-image "gh-docs-phase2-postgres:$tag" --bootstrap-cache "$bootstrap_cache"
+~~~
+
+The local transcripts are
+`/tmp/gh-docs-phase2-{rust,phase0,phase1,compose,minikube,phase1-minikube}-final.log`.
+The disposable Compose projects, firewall tables, Minikube profiles, test
+image tags, and generated fixtures were removed. Live acquisition, ARM64,
+hosted CI, and physical power-loss durability were outside this qualification.
