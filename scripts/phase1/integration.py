@@ -93,6 +93,7 @@ def upgrade(tag):
                     "postgres", timeout=75)
         foundation = (ROOT / "migrations/0001_foundation.sql").read_text()
         catalog = (ROOT / "migrations/0002_git_catalog.sql").read_text()
+        synchronization = (ROOT / "migrations/0003_synchronization.sql").read_text()
         assert sql(old, f"SET ROLE gh_docs_migrate;\n{foundation}").splitlines() == []
         assert sql(old, "SELECT to_regnamespace('git_catalog') IS NULL;") == "t"
         sql(old, "SET ROLE gh_docs_migrate; INSERT INTO foundation.probe VALUES (72, 'upgrade sentinel');")
@@ -104,12 +105,40 @@ def upgrade(tag):
         sql(old, f"SET ROLE gh_docs_sync; SELECT git_catalog.register_fixture("
             f"'{legacy_repo}','{legacy_source}','sha1','urn:gh-docs:fixture:{legacy_repo}',"
             "ARRAY[convert_to('refs/heads/main','UTF8')]);")
+        sql(old, f"SET ROLE gh_docs_migrate;\n{synchronization}")
+        verified_repo = "11111111-1111-4111-8111-111111111112"
+        verified_source = "22222222-2222-4222-8222-222222222223"
+        sql(old, f"""SET ROLE gh_docs_migrate;
+            SELECT git_catalog.approve_source('{verified_repo}','{verified_source}','sha1',
+                'https://fixture.example.invalid/repo.git', 1, ARRAY[convert_to('refs/heads/main','UTF8')],
+                jsonb_build_object('reviewed_at','2002-02-02T02:02:02Z'));
+            SET ROLE gh_docs_sync;
+            SELECT git_catalog.seal_candidate(git_catalog.start_reconcile('{verified_repo}','{verified_source}',1),
+                decode(repeat('aa',32),'hex'),decode(repeat('bb',32),'hex'),decode(repeat('cc',32),'hex'),
+                convert_to('refs/heads/main','UTF8'),
+                jsonb_build_array(jsonb_build_array(encode(convert_to('refs/heads/main','UTF8'),'base64'),
+                    'commit',repeat('01',20),repeat('01',20))), '{{}}', '2002-02-02T02:02:02Z', 1);
+        """)
+        legacy_verified = sql(old, f"""SELECT g.generation_id, g.state, encode(g.manifest_digest,'hex'),
+            p.state, encode(f.target_oid, 'hex')
+            FROM git_catalog.repository_generations g
+            JOIN git_catalog.private_candidates p USING (repository_id, generation_id)
+            JOIN git_catalog.generation_refs f USING (repository_id, generation_id)
+            WHERE g.repository_id = '{verified_repo}'""")
+        assert legacy_verified == f"0|verified|{'bb' * 32}|usable|{'01' * 20}", legacy_verified
         old.one_shot("migrate")
         old.one_shot("migrate")
         assert sql(old, "SELECT value FROM foundation.probe WHERE id = 72;") == "upgrade sentinel"
         assert sql(old, f"SELECT canonical_identity FROM git_catalog.repository_sources WHERE source_id='{legacy_source}';") == f"urn:gh-docs:fixture:{legacy_repo}"
-        assert sql(old, "SELECT version FROM git_catalog.migrations ORDER BY version;").splitlines() == ["2", "3"]
-    print("A05 Phase 0 upgrade, transactional rollback, and repeated migration passed", flush=True)
+        assert sql(old, "SELECT version FROM git_catalog.migrations ORDER BY version;").splitlines() == ["2", "3", "4"]
+        assert sql(old, f"""SELECT g.generation_id, g.state, encode(g.manifest_digest,'hex'),
+            p.state, encode(f.target_oid, 'hex')
+            FROM git_catalog.repository_generations g
+            JOIN git_catalog.private_candidates p USING (repository_id, generation_id)
+            JOIN git_catalog.generation_refs f USING (repository_id, generation_id)
+            WHERE g.repository_id = '{verified_repo}'""") == legacy_verified
+        assert sql(old, "SELECT count(*) FROM git_catalog.readable_generations") == "0"
+    print("A05 Phase 0 and Phase 2 upgrades, verified candidate preservation, and repeated migration passed", flush=True)
 
 
 def database_constraints(stack):
@@ -254,7 +283,7 @@ def invalid_store_inputs(stack):
 def fresh(args):
     with stack(args.image_tag, "fresh", fixtures=True) as current:
         current.start()
-        assert sql(current, "SELECT version FROM git_catalog.migrations ORDER BY version;").splitlines() == ["2", "3"]
+        assert sql(current, "SELECT version FROM git_catalog.migrations ORDER BY version;").splitlines() == ["2", "3", "4"]
         filesystem(current)
         for mode, service in [("read", "serve"), ("fail-setup", "serve"), ("register", "sync")]:
             print(role(current, service, mode, timeout=80).stdout, end="", flush=True)

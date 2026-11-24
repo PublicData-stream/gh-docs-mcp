@@ -102,6 +102,34 @@ pub(crate) fn open_bare(
     })
 }
 
+/// Inspect the canonical store without taking a second flock. The caller
+/// already owns the repository fence.
+pub fn validate_canonical(repo: RepositoryId, format: ObjectFormat) -> io::Result<PathBuf> {
+    Ok(open_bare(
+        Location::Canonical(repo),
+        format,
+        Instant::now() + Duration::from_secs(15),
+    )?
+    .path)
+}
+
+/// Open and qualify the canonical volume before creating any metadata.
+pub fn canonical_root() -> io::Result<PathBuf> {
+    let root = open_root(StoreRoot::Canonical)?;
+    let mut fs = std::mem::MaybeUninit::<libc::statfs>::uninit();
+    // SAFETY: the output is written by fstatfs on success.
+    if unsafe { libc::fstatfs(root.as_raw_fd(), fs.as_mut_ptr()) } != 0 {
+        return Err(io::Error::last_os_error());
+    }
+    // The initial publication profile qualifies ext4-backed local storage.
+    if unsafe { fs.assume_init() }.f_type != 0xef53 {
+        return Err(invalid(
+            "canonical publication requires the qualified ext4 filesystem",
+        ));
+    }
+    Ok(PathBuf::from(StoreRoot::Canonical.path()))
+}
+
 pub fn bare_config(format: ObjectFormat) -> &'static str {
     match format {
         ObjectFormat::Sha1 => "[core]\n\trepositoryformatversion = 0\n\tbare = true\n",
@@ -250,10 +278,16 @@ fn allowed_entry(format: ObjectFormat, parents: &[Vec<u8>], name: &[u8], is_dir:
         [root, subdir] if root == b"objects" && subdir == b"pack" => {
             !is_dir
                 && name.strip_prefix(b"pack-").is_some_and(|name| {
-                    [b".pack".as_slice(), b".idx", b".rev", b".bitmap"]
-                        .iter()
-                        .filter_map(|suffix| name.strip_suffix(*suffix))
-                        .any(|digest| digest.len() == format.digest_len() * 2 && hex(digest))
+                    [
+                        b".pack".as_slice(),
+                        b".idx",
+                        b".rev",
+                        b".bitmap",
+                        b".mtimes",
+                    ]
+                    .iter()
+                    .filter_map(|suffix| name.strip_suffix(*suffix))
+                    .any(|digest| digest.len() == format.digest_len() * 2 && hex(digest))
                 })
         }
         [root, subdir] if root == b"objects" && subdir.len() == 2 && hex(subdir) => {

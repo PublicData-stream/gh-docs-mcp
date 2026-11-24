@@ -552,6 +552,7 @@ name = "gh-docs-storage"
 version = "0.1.0"
 dependencies = [
  "gh-docs-core",
+ "gh-docs-git",
  "rustls",
  "serde_json",
  "tokio",
@@ -568,6 +569,7 @@ dependencies = [
  "chrono",
  "gh-docs-core",
  "gh-docs-git",
+ "gh-docs-storage",
  "hickory-resolver",
  "libc",
  "reqwest",

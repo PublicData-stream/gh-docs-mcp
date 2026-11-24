@@ -5,6 +5,7 @@ use std::{
     io::{self, BufRead, Read},
     os::unix::process::CommandExt,
     process::Command,
+    sync::{Arc, atomic::AtomicBool},
     time::{Duration, Instant},
 };
 
@@ -28,7 +29,8 @@ pub struct Reader {
     format: ObjectFormat,
     deadline: Instant,
     force_failure: bool,
-    _fence: Option<Fence>,
+    _fences: Vec<Fence>,
+    cancellation: Option<Arc<AtomicBool>>,
 }
 
 impl Reader {
@@ -48,8 +50,27 @@ impl Reader {
             format,
             deadline,
             force_failure: false,
-            _fence: fence,
+            _fences: fence.into_iter().collect(),
+            cancellation: None,
         })
+    }
+
+    /// Construct a canonical reader with the matching repository and generation fences.
+    pub fn fenced(
+        repo: RepositoryId,
+        format: ObjectFormat,
+        repository: Fence,
+        generation: Fence,
+        cancellation: Arc<AtomicBool>,
+    ) -> Self {
+        Self {
+            location: Location::Canonical(repo),
+            format,
+            deadline: Instant::now() + WALL_LIMIT,
+            force_failure: false,
+            _fences: vec![generation, repository],
+            cancellation: Some(cancellation),
+        }
     }
 
     #[doc(hidden)]
@@ -114,7 +135,7 @@ impl Reader {
         if self.force_failure {
             command.arg("--fail-setup");
         }
-        Process::spawn(command, self.deadline)
+        Process::spawn(command, self.deadline, self.cancellation.clone())
     }
 }
 

@@ -7,6 +7,10 @@ use std::{
         unix::process::CommandExt,
     },
     process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -16,12 +20,30 @@ pub(crate) struct Process {
     input: Option<ChildStdin>,
     pub(crate) output: BufReader<Output>,
     deadline: Instant,
+    cancellation: Option<Arc<AtomicBool>>,
     reaped: bool,
 }
 
 impl Process {
-    pub(crate) fn spawn(mut command: Command, deadline: Instant) -> io::Result<Self> {
-        ensure_time(deadline)?;
+    pub(crate) fn spawn(
+        mut command: Command,
+        deadline: Instant,
+        cancellation: Option<Arc<AtomicBool>>,
+    ) -> io::Result<Self> {
+        remaining(deadline, cancellation.as_deref())?;
+        let parent = std::process::id() as libc::pid_t;
+        // SAFETY: all syscalls in this pre-exec hook are async-signal-safe.
+        unsafe {
+            command.pre_exec(move || {
+                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
+                    return Err(io::Error::last_os_error());
+                }
+                if libc::getppid() != parent {
+                    return Err(io::Error::from(io::ErrorKind::BrokenPipe));
+                }
+                Ok(())
+            });
+        }
         let mut child = command
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
@@ -36,8 +58,10 @@ impl Process {
             output: BufReader::new(Output {
                 pipe: output,
                 deadline,
+                cancellation: cancellation.clone(),
             }),
             deadline,
+            cancellation,
             reaped: false,
         };
         nonblocking(process.input.as_ref().expect("piped stdin").as_raw_fd())?;
@@ -51,7 +75,12 @@ impl Process {
             .as_mut()
             .ok_or_else(|| io::Error::other("closed Git stdin"))?;
         while !bytes.is_empty() {
-            ready(pipe.as_raw_fd(), libc::POLLOUT, self.deadline)?;
+            ready(
+                pipe.as_raw_fd(),
+                libc::POLLOUT,
+                self.deadline,
+                self.cancellation.as_deref(),
+            )?;
             match pipe.write(bytes) {
                 Ok(0) => return Err(io::ErrorKind::WriteZero.into()),
                 Ok(written) => bytes = &bytes[written..],
@@ -71,7 +100,7 @@ impl Process {
             ));
         }
         loop {
-            ensure_time(self.deadline)?;
+            remaining(self.deadline, self.cancellation.as_deref())?;
             if let Some(status) = self.child.try_wait()? {
                 self.reaped = true;
                 return if status.success() {
@@ -98,6 +127,7 @@ impl Drop for Process {
 pub(crate) struct Output {
     pipe: ChildStdout,
     deadline: Instant,
+    cancellation: Option<Arc<AtomicBool>>,
 }
 
 impl Read for Output {
@@ -106,7 +136,12 @@ impl Read for Output {
             return Ok(0);
         }
         loop {
-            ready(self.pipe.as_raw_fd(), libc::POLLIN, self.deadline)?;
+            ready(
+                self.pipe.as_raw_fd(),
+                libc::POLLIN,
+                self.deadline,
+                self.cancellation.as_deref(),
+            )?;
             match self.pipe.read(out) {
                 Err(error) if retry(&error) => (),
                 result => return result,
@@ -136,14 +171,33 @@ fn nonblocking(fd: RawFd) -> io::Result<()> {
     Ok(())
 }
 
-fn ready(fd: RawFd, events: i16, deadline: Instant) -> io::Result<()> {
+fn remaining(deadline: Instant, cancellation: Option<&AtomicBool>) -> io::Result<Duration> {
+    if cancellation.is_some_and(|signal| signal.load(Ordering::Acquire)) {
+        return Err(io::Error::other("Git worker cancelled"));
+    }
+    ensure_time(deadline)
+}
+
+fn ready(
+    fd: RawFd,
+    events: i16,
+    deadline: Instant,
+    cancellation: Option<&AtomicBool>,
+) -> io::Result<()> {
     let mut event = libc::pollfd {
         fd,
         events,
         revents: 0,
     };
     loop {
-        let millis = ensure_time(deadline)?.as_millis().saturating_add(1);
+        let millis = remaining(deadline, cancellation)?
+            .as_millis()
+            .saturating_add(1);
+        let millis = if cancellation.is_some() {
+            millis.min(50)
+        } else {
+            millis
+        };
         // SAFETY: event is a live single-element pollfd array.
         let result = unsafe { libc::poll(&mut event, 1, millis.min(i32::MAX as u128) as i32) };
         if result > 0 {
@@ -167,7 +221,7 @@ mod tests {
         let mut command = Command::new("/bin/sh");
         command.args(["-c", "while :; do :; done"]);
         let mut worker =
-            Process::spawn(command, Instant::now() + Duration::from_millis(75)).unwrap();
+            Process::spawn(command, Instant::now() + Duration::from_millis(75), None).unwrap();
         let pid = worker.child.id() as libc::pid_t;
         assert_eq!(
             worker.output.read(&mut [0]).unwrap_err().kind(),

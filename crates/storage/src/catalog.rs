@@ -38,14 +38,18 @@ pub async fn migrate(client: &mut Client) -> Result<()> {
         .iter()
         .map(|row| row.get(0))
         .collect();
-    match versions.as_slice() {
-        [2] => {
-            transaction
-                .batch_execute(include_str!("../../../migrations/0003_synchronization.sql"))
-                .await?
-        }
-        [2, 3] => (),
-        _ => return Err("unsupported Git catalog migration version".into()),
+    if !matches!(versions.as_slice(), [2] | [2, 3] | [2, 3, 4]) {
+        return Err("unsupported Git catalog migration version".into());
+    }
+    if !versions.contains(&3) {
+        transaction
+            .batch_execute(include_str!("../../../migrations/0003_synchronization.sql"))
+            .await?;
+    }
+    if !versions.contains(&4) {
+        transaction
+            .batch_execute(include_str!("../../../migrations/0004_publication.sql"))
+            .await?;
     }
     transaction.commit().await?;
     Ok(())

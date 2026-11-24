@@ -112,3 +112,4 @@ pub async fn probe(mut client: Client, name: &str) -> Result<()> {
 }
 
 pub mod catalog;
+pub mod publication;
