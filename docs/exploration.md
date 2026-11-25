@@ -3,8 +3,8 @@
 The Phase 4 Rust service in `gh_docs_search::exploration` provides a typed
 request interface over approved SHA-1 and SHA-256 generations. Compose
 qualifies it through the feature-gated `gh-docs-phase4-fixture` JSON driver
-with serve credentials and the read-only published store. HTTP currently
-serves the Phase 0 MCP fixture.
+with serve credentials and the read-only published store. The normal HTTP
+endpoint uses the same engine. See [MCP search and history](mcp.md).
 
 ## Output approval
 
@@ -155,7 +155,7 @@ requests per repository. Slots remain assigned through worker reap. The
 request deadline is 15 seconds. The reader shares limits of 50,000
 object and tree-entry visits, 128 MiB of worker output, 16 MiB of
 tree-entry materialization, and 8 MiB per blob. The tree depth limit is
-64 and the serialized result budget is 256 KiB. These are initial
+64 and the full MCP response budget is 256 KiB. These are initial
 service limits. Host capacity and maximum safe concurrency require
 separate qualification.
 

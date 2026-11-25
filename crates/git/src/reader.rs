@@ -129,6 +129,24 @@ impl Reader {
         self.batch(|batch| batch.tree(tree))
     }
 
+    pub fn search_worker(&self) -> io::Result<Process> {
+        let mut command = Command::new("/usr/local/bin/gh-docs-search-worker");
+        command.env_clear();
+        if self.force_failure.load(Ordering::Relaxed) {
+            command.arg("--fail-setup");
+        }
+        let mut process = Process::spawn(command, self.deadline, self.cancellation.clone())?;
+        let mut startup = [0];
+        process.read_exact(&mut startup)?;
+        if startup != [WORKER_READY] {
+            return Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                SandboxUnavailable,
+            ));
+        }
+        Ok(process)
+    }
+
     fn spawn(&self, tree: Option<Oid>) -> io::Result<Process> {
         let mut command = Command::new(READER);
         command.env_clear();
@@ -220,9 +238,13 @@ impl Batch<'_> {
         payload(&mut self.process.output, info.size)
     }
 
-    pub fn commit(&mut self, oid: Oid) -> io::Result<CommitLinks> {
+    pub fn commit_bytes(&mut self, oid: Oid) -> io::Result<(CommitLinks, Vec<u8>)> {
         let raw = self.contents(oid, ObjectType::Commit)?;
-        parse_commit(self.format, &raw)
+        Ok((parse_commit(self.format, &raw)?, raw))
+    }
+
+    pub fn commit(&mut self, oid: Oid) -> io::Result<CommitLinks> {
+        self.commit_bytes(oid).map(|(links, _)| links)
     }
 
     pub fn tree(&mut self, tree: Oid) -> io::Result<Vec<TreeEntry>> {

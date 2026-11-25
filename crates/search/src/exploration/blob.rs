@@ -38,28 +38,37 @@ pub(super) fn page(
     } else {
         None
     };
-    // Six encoded JSON bytes per raw byte is the worst case for text.
-    // Use the actual envelope size since paths and notices are variable.
     let remaining = RESPONSE_BYTES.saturating_sub(json_size(&base)? + 2048);
-    let max_raw = match encoding {
-        Encoding::Utf8 => remaining / 6,
-        Encoding::Base64 => remaining / 4 * 3,
+    let make_data = |last: usize| match text {
+        Some(text) => text[first - range.start..last - range.start].to_owned(),
+        None => STANDARD.encode(&raw[first..last]),
+    };
+    if text.is_some_and(|text| !text.is_char_boundary(first - range.start)) {
+        return Err(Error::CursorInvalid);
     }
-    .min(CHUNK);
-    let mut last = range.end.min(first + max_raw);
-    if let Some(text) = text {
-        if !text.is_char_boundary(first - range.start) {
-            return Err(Error::CursorInvalid);
+    let boundary = |position: usize| {
+        text.map_or(position, |text| {
+            range.start + text.floor_char_boundary(position - range.start)
+        })
+    };
+    let mut last = boundary(range.end.min(first + CHUNK));
+    let mut data = make_data(last);
+    if json_size(&json!(data))? > remaining {
+        let (mut low, mut high) = (first, last);
+        while low < high {
+            let middle = low + (high - low).div_ceil(2);
+            if json_size(&json!(make_data(boundary(middle))))? <= remaining {
+                low = middle;
+            } else {
+                high = middle - 1;
+            }
         }
-        last = range.start + text.floor_char_boundary(last - range.start);
+        last = boundary(low);
+        data = make_data(last);
     }
     if first == last && first != range.end {
         return Err(Error::Budget);
     }
-    let data = match text {
-        Some(text) => text[first - range.start..last - range.start].to_owned(),
-        None => STANDARD.encode(&raw[first..last]),
-    };
     let complete = last == range.end;
     let next = if complete {
         None

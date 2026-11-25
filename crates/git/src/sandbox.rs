@@ -27,13 +27,15 @@ const CPU_SECONDS: u64 = 2;
 pub enum Profile {
     Git,
     Search,
+    FramedSearch,
 }
 
 impl Profile {
-    fn executable(self) -> &'static str {
+    fn executable(self) -> Option<&'static str> {
         match self {
-            Self::Git => GIT,
-            Self::Search => RG,
+            Self::Git => Some(GIT),
+            Self::Search => Some(RG),
+            Self::FramedSearch => None,
         }
     }
 }
@@ -53,6 +55,10 @@ pub fn probe(profile: Profile, force_failure: bool) -> io::Result<()> {
         drop(writer);
         // SAFETY: replace this dedicated probe's stdin with the bounded input pipe.
         checked(unsafe { libc::dup2(input.as_raw_fd(), 0) }.into())?;
+    }
+
+    if matches!(profile, Profile::FramedSearch) {
+        denied.extend([ALLOWED, SELECTED_HEAD, RG, "/run/secrets/cursor.key"]);
     }
 
     // Positive controls keep the probe from passing merely because a mount,
@@ -117,6 +123,7 @@ pub fn probe(profile: Profile, force_failure: bool) -> io::Result<()> {
     eprintln!("Landlock ABI {abi}, seccomp, inherited descriptors and denial controls passed");
 
     match profile {
+        Profile::FramedSearch => Ok(()),
         Profile::Search => exec_rg("phase-zero", true, true),
         Profile::Git => Err(Command::new(GIT)
             .env_clear()
@@ -153,7 +160,12 @@ pub(crate) fn confine(
     // SAFETY: the dedicated helper only needs stdin, stdout and stderr.
     checked(unsafe { libc::syscall(libc::SYS_close_range, 3_u32, u32::MAX, 0_u32) })?;
     set_limit(libc::RLIMIT_CPU, CPU_SECONDS as libc::rlim_t)?;
-    set_limit(libc::RLIMIT_AS, 256 * 1024 * 1024)?;
+    let memory_mib = if matches!(profile, Profile::FramedSearch) {
+        64
+    } else {
+        256
+    };
+    set_limit(libc::RLIMIT_AS, memory_mib * 1024 * 1024)?;
     set_limit(libc::RLIMIT_FSIZE, 0)?;
     set_limit(libc::RLIMIT_CORE, 0)?;
     install_seccomp(false)?;
@@ -269,7 +281,9 @@ fn install_landlock(
     })?;
     // SAFETY: a successful create call returned a new owned descriptor.
     let ruleset = unsafe { File::from_raw_fd(ruleset as i32) };
-    add_landlock_rule(&ruleset, profile.executable(), READ_FILE | EXECUTE)?;
+    if let Some(executable) = profile.executable() {
+        add_landlock_rule(&ruleset, executable, READ_FILE | EXECUTE)?;
+    }
     if matches!(profile, Profile::Git) {
         let repository = repository.ok_or_else(|| io::Error::other("missing Git sandbox root"))?;
         add_landlock_anchor(&ruleset, repository, READ_FILE | READ_DIR)?;
@@ -545,4 +559,9 @@ fn confine_sync_scope(scratch: &str, broker: bool, write: bool) -> io::Result<()
     set_limit(libc::RLIMIT_FSIZE, 272 * 1024 * 1024)?;
     set_limit(libc::RLIMIT_CORE, 0)?;
     install_seccomp(true)
+}
+
+/// Install the framed worker policy in a freshly executed, single-threaded process.
+pub fn confine_framed_search(force_failure: bool) -> io::Result<()> {
+    confine(Profile::FramedSearch, None, force_failure).map(|_| ())
 }

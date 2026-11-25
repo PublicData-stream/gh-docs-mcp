@@ -38,7 +38,7 @@ def stack(tag, variant, fixtures=False):
     instance = None
     installed = False
     try:
-        instance = phase0.Stack(root, project, tag)
+        instance = phase0.Stack(root, project, tag, mcp_fixture=fixtures)
         if fixtures:
             records = generate(root / "store", root / "oracle.json", root / "staging/incoming")
             own_tree(root / "store/repositories")
@@ -130,7 +130,7 @@ def upgrade(tag):
         old.one_shot("migrate")
         assert sql(old, "SELECT value FROM foundation.probe WHERE id = 72;") == "upgrade sentinel"
         assert sql(old, f"SELECT canonical_identity FROM git_catalog.repository_sources WHERE source_id='{legacy_source}';") == f"urn:gh-docs:fixture:{legacy_repo}"
-        assert sql(old, "SELECT version FROM git_catalog.migrations ORDER BY version;").splitlines() == ["2", "3", "4", "5"]
+        assert sql(old, "SELECT version FROM git_catalog.migrations ORDER BY version;").splitlines() == ["2", "3", "4", "5", "6"]
         assert sql(old, f"""SELECT g.generation_id, g.state, encode(g.manifest_digest,'hex'),
             p.state, encode(f.target_oid, 'hex')
             FROM git_catalog.repository_generations g
@@ -283,7 +283,7 @@ def invalid_store_inputs(stack):
 def fresh(args):
     with stack(args.image_tag, "fresh", fixtures=True) as current:
         current.start()
-        assert sql(current, "SELECT version FROM git_catalog.migrations ORDER BY version;").splitlines() == ["2", "3", "4", "5"]
+        assert sql(current, "SELECT version FROM git_catalog.migrations ORDER BY version;").splitlines() == ["2", "3", "4", "5", "6"]
         filesystem(current)
         for mode, service in [("read", "serve"), ("fail-setup", "serve"), ("register", "sync")]:
             print(role(current, service, mode, timeout=80).stdout, end="", flush=True)

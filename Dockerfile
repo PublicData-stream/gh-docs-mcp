@@ -48,13 +48,14 @@ RUN --network=none \
     && mkdir /out \
     && cp /tmp/rust/target/release/gh-docs-serve /tmp/rust/target/release/gh-docs-sync \
           /tmp/rust/target/release/gh-docs-feed /tmp/rust/target/release/gh-docs-git-reader \
-          /tmp/rust/target/release/gh-docs-git-sync /out/
+          /tmp/rust/target/release/gh-docs-git-sync \
+          /tmp/rust/target/release/gh-docs-search-worker /out/
 
 FROM docker.io/library/alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS runtime
 COPY LICENSE docs/RFC-MCP-DOCKER-LICENSE /usr/share/licenses/gh-docs-mcp/
 
 FROM runtime AS serve
-COPY --from=app-build /out/gh-docs-serve /out/gh-docs-git-reader /usr/local/bin/
+COPY --from=app-build /out/gh-docs-serve /out/gh-docs-git-reader /out/gh-docs-search-worker /usr/local/bin/
 COPY --from=git-build /out/git /usr/local/bin/
 COPY --from=git-build /out/COPYING /usr/share/licenses/git/
 COPY --from=ripgrep-build /out/rg /usr/local/bin/

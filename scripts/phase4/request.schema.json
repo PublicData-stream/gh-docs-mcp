@@ -120,9 +120,123 @@
         "tool",
         "arguments"
       ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "$ref": "#/$defs/Rg"
+        },
+        "tool": {
+          "type": "string",
+          "const": "git.rg"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "arguments"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "$ref": "#/$defs/Log"
+        },
+        "tool": {
+          "type": "string",
+          "const": "git.log"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "arguments"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "$ref": "#/$defs/Show"
+        },
+        "tool": {
+          "type": "string",
+          "const": "git.show"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "arguments"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "$ref": "#/$defs/Diff"
+        },
+        "tool": {
+          "type": "string",
+          "const": "git.diff"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "arguments"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "$ref": "#/$defs/Blame"
+        },
+        "tool": {
+          "type": "string",
+          "const": "git.blame"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "arguments"
+      ]
     }
   ],
   "$defs": {
+    "Blame": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/Context"
+        },
+        "line_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ByteRange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "path": {
+          "$ref": "#/$defs/BytePath"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "context",
+        "path"
+      ]
+    },
     "BytePath": {
       "oneOf": [
         {
@@ -244,6 +358,44 @@
         "commit_oid"
       ]
     },
+    "Diff": {
+      "type": "object",
+      "properties": {
+        "base": {
+          "$ref": "#/$defs/Context"
+        },
+        "context_lines": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "head": {
+          "$ref": "#/$defs/Context"
+        },
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BytePath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "base",
+        "head"
+      ]
+    },
     "Encoding": {
       "type": "string",
       "enum": [
@@ -308,6 +460,31 @@
           "$ref": "#/$defs/Page"
         },
         "root": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BytePath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "context"
+      ]
+    },
+    "Log": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/Context"
+        },
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "path": {
           "anyOf": [
             {
               "$ref": "#/$defs/BytePath"
@@ -486,6 +663,60 @@
         "selector"
       ]
     },
+    "Rg": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/Context"
+        },
+        "context_lines": {
+          "type": "integer",
+          "format": "uint8",
+          "default": 0,
+          "maximum": 255,
+          "minimum": 0
+        },
+        "ignore_case": {
+          "type": "boolean",
+          "default": false
+        },
+        "literal": {
+          "type": "boolean",
+          "default": false
+        },
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "path_glob": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ByteString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "root": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BytePath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "context",
+        "pattern"
+      ]
+    },
     "Selector": {
       "oneOf": [
         {
@@ -535,6 +766,48 @@
             "kind"
           ]
         }
+      ]
+    },
+    "Show": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/Context"
+        },
+        "context_lines": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "parent": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint32",
+          "minimum": 0
+        },
+        "path": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BytePath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "context"
       ]
     }
   }

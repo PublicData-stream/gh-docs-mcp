@@ -26,6 +26,27 @@ impl Entries {
         })
     }
 
+    pub fn reserve(&mut self, value: &Value) -> Result<(), Error> {
+        self.used += json_size(value)?;
+        if self.used > RESPONSE_BYTES {
+            return Err(Error::Budget);
+        }
+        Ok(())
+    }
+
+    pub fn resume_offset(&self) -> u64 {
+        self.after
+    }
+
+    pub fn limit(&self) -> usize {
+        self.limit
+    }
+
+    pub fn push_resumed(&mut self, value: Value) -> Result<bool, Error> {
+        self.seen = self.seen.max(self.after);
+        self.push(value)
+    }
+
     /// Stop only after confirming another approved entry exists.
     pub fn push(&mut self, value: Value) -> Result<bool, Error> {
         self.seen += 1;
@@ -83,7 +104,10 @@ pub(super) fn coverage(complete: bool, budget: bool, count: usize, bytes: Option
 }
 
 pub(super) fn json_size(value: &Value) -> Result<usize, Error> {
-    serde_json::to_vec(value)
-        .map(|bytes| bytes.len())
-        .map_err(|_| Error::Internal)
+    let json = serde_json::to_string(value).map_err(|_| Error::Internal)?;
+    let escaped = json
+        .bytes()
+        .filter(|byte| matches!(byte, b'"' | b'\\'))
+        .count();
+    Ok(json.len() * 2 + escaped + 2)
 }

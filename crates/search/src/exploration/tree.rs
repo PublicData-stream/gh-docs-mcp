@@ -55,7 +55,7 @@ impl<'a, 'reader> Tree<'a, 'reader> {
         Ok(entries)
     }
 
-    fn lookup(&mut self, mut tree: Oid, path: &[u8]) -> Result<Option<TreeEntry>, Error> {
+    pub fn lookup(&mut self, mut tree: Oid, path: &[u8]) -> Result<Option<TreeEntry>, Error> {
         let mut components = path.split(|&byte| byte == b'/').peekable();
         for depth in 0..MAX_DEPTH {
             let Some(component) = components.next() else {
@@ -132,6 +132,10 @@ impl<'a, 'reader> Tree<'a, 'reader> {
         }
     }
 
+    pub fn batch(&mut self) -> &mut Batch<'reader> {
+        self.batch
+    }
+
     pub fn walk(
         &mut self,
         tree: Oid,
@@ -139,6 +143,37 @@ impl<'a, 'reader> Tree<'a, 'reader> {
         depth: u8,
         matcher: Option<&Matcher>,
         output: &mut Entries,
+    ) -> Result<bool, Error> {
+        let metadata_notice = &self.policy.metadata_notice;
+        self.visit(tree, root, depth, false, &mut |_, entry, path, notice| {
+            if matcher.is_some_and(|matcher| !matcher.matches(path)) {
+                return Ok(true);
+            }
+            let path = BytePath::encode(path).map_err(|_| Error::UnsupportedEncoding)?;
+            let (mode, kind) = mode(&entry.mode);
+            let mut item = json!({
+                "path":path, "mode":mode, "kind":kind, "navigation_only":notice.is_none(),
+                "notice":notice.unwrap_or(metadata_notice),
+            });
+            if notice.is_some() {
+                item["oid"] = json!(entry.oid.to_string());
+            }
+            output.push(item)
+        })
+    }
+
+    pub fn visit(
+        &mut self,
+        tree: Oid,
+        root: &[u8],
+        depth: u8,
+        require_full_depth: bool,
+        visit: &mut impl FnMut(
+            &mut Batch<'reader>,
+            &TreeEntry,
+            &[u8],
+            Option<&str>,
+        ) -> Result<bool, Error>,
     ) -> Result<bool, Error> {
         let children = self.children(tree)?;
         let mut actions = Vec::new();
@@ -174,23 +209,14 @@ impl<'a, 'reader> Tree<'a, 'reader> {
                 continue;
             }
             if descend {
-                if !self.walk(entry.oid, &path, depth - 1, matcher, output)? {
+                if !self.visit(entry.oid, &path, depth - 1, require_full_depth, visit)? {
                     return Ok(false);
                 }
             } else {
-                if matcher.is_some_and(|matcher| !matcher.matches(&path)) {
-                    continue;
+                if directory && depth == 1 && require_full_depth {
+                    return Err(Error::Budget);
                 }
-                let path = BytePath::encode(&path).map_err(|_| Error::UnsupportedEncoding)?;
-                let (mode, kind) = mode(&entry.mode);
-                let mut item = json!({
-                    "path":path, "mode":mode, "kind":kind, "navigation_only":navigation,
-                    "notice":notice.unwrap_or(&self.policy.metadata_notice),
-                });
-                if !navigation {
-                    item["oid"] = json!(entry.oid.to_string());
-                }
-                if !output.push(item)? {
+                if !visit(self.batch, entry, &path, notice)? {
                     return Ok(false);
                 }
             }

@@ -2,9 +2,11 @@
 
 mod blob;
 mod cursor;
+mod history;
 mod matcher;
 mod page;
 mod request;
+mod rg;
 mod tree;
 
 pub use cursor::CursorKey;
@@ -35,7 +37,8 @@ use matcher::Matcher;
 use page::{Entries, coverage, json_size};
 use tree::{MAX_DEPTH, Tree};
 
-const RESPONSE_BYTES: usize = 256 * 1024;
+// Reserve space for the largest valid request ID and the protocol envelope.
+const RESPONSE_BYTES: usize = 184 * 1024;
 const REQUEST_DEADLINE: Duration = Duration::from_secs(15);
 const GLOBAL_SLOTS: usize = 4;
 const REPOSITORY_SLOTS: usize = 2;
@@ -43,6 +46,8 @@ const REPOSITORY_SLOTS: usize = 2;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Error {
     InvalidArgument,
+    InvalidRegex,
+    PolicyDenied,
     UnsupportedFormat,
     UnsupportedEncoding,
     InvalidBoundary,
@@ -59,6 +64,8 @@ pub enum Error {
 impl Error {
     pub fn code(self) -> &'static str {
         match self {
+            Self::InvalidRegex => "invalid_regex",
+            Self::PolicyDenied => "policy_denied",
             Self::InvalidArgument => "invalid_argument",
             Self::UnsupportedFormat => "unsupported_object_format",
             Self::UnsupportedEncoding => "unsupported_encoding",
@@ -122,6 +129,7 @@ impl Serialize for Error {
             Self::CursorInvalid | Self::CursorExpired | Self::GenerationUnavailable => {
                 Some("Restart from the first page or resolve a fresh context.")
             }
+            Self::Budget => Some("Retry after current work finishes or narrow the request scope."),
             _ => None,
         };
         json!({"code":self.code(), "guidance":restart}).serialize(ser)
@@ -279,6 +287,23 @@ impl Explorer {
                 let query = TreeQuery::from_find(self, request)?;
                 self.tree(&mut client, query, global).await
             }
+            Request::Rg(request) => self.rg(&mut client, request, global).await,
+            Request::Log(request) => {
+                self.history(&mut client, history::Query::Log(request), global)
+                    .await
+            }
+            Request::Show(request) => {
+                self.history(&mut client, history::Query::Show(request), global)
+                    .await
+            }
+            Request::Diff(request) => {
+                self.history(&mut client, history::Query::Diff(request), global)
+                    .await
+            }
+            Request::Blame(request) => {
+                self.history(&mut client, history::Query::Blame(request), global)
+                    .await
+            }
             Request::Read(request) => {
                 let (repo, generation, format, commit) = request.context.coordinates()?;
                 let path = request.path.decode().map_err(|_| Error::InvalidArgument)?;
@@ -409,7 +434,6 @@ fn pinned(
     generation: Option<i64>,
     commit: Option<Oid>,
 ) -> Result<Option<i64>, Error> {
-    pagination.offset()?;
     if let Some(scope) = &pagination.scope {
         if repo.to_string() != scope.repository_id
             || generation.is_some_and(|generation| generation != scope.generation_id)

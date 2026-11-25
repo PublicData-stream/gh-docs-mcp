@@ -37,6 +37,7 @@ pub(super) struct Scope {
 pub(super) enum Position {
     Repository(uuid::Uuid),
     Offset(u64),
+    Search { path: u64, byte: u32 },
 }
 
 #[derive(Serialize, Deserialize)]

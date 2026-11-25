@@ -21,6 +21,16 @@ pub enum Request {
     Find(Find),
     #[serde(rename = "git.read")]
     Read(Read),
+    #[serde(rename = "git.rg")]
+    Rg(Rg),
+    #[serde(rename = "git.log")]
+    Log(Log),
+    #[serde(rename = "git.show")]
+    Show(Show),
+    #[serde(rename = "git.diff")]
+    Diff(Diff),
+    #[serde(rename = "git.blame")]
+    Blame(Blame),
 }
 
 #[derive(Debug, Default, Deserialize, JsonSchema)]
@@ -178,4 +188,62 @@ pub enum Encoding {
     #[default]
     Utf8,
     Base64,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Rg {
+    pub context: Context,
+    pub pattern: String,
+    #[serde(default)]
+    pub literal: bool,
+    #[serde(default)]
+    pub ignore_case: bool,
+    pub root: Option<BytePath>,
+    pub path_glob: Option<ByteString>,
+    #[serde(default)]
+    pub context_lines: u8,
+    #[serde(default)]
+    pub page: Page,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Log {
+    pub context: Context,
+    pub path: Option<BytePath>,
+    #[serde(default)]
+    pub page: Page,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Show {
+    pub context: Context,
+    pub parent: Option<u32>,
+    pub path: Option<BytePath>,
+    pub context_lines: Option<u8>,
+    #[serde(default)]
+    pub page: Page,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Diff {
+    pub base: Context,
+    pub head: Context,
+    pub path: Option<BytePath>,
+    pub context_lines: Option<u8>,
+    #[serde(default)]
+    pub page: Page,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct Blame {
+    pub context: Context,
+    pub path: BytePath,
+    pub line_range: Option<ByteRange>,
+    #[serde(default)]
+    pub page: Page,
 }

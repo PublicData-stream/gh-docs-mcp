@@ -31,6 +31,8 @@ services:
     user: "10001:10001"
     environment:
       <<: *db-client
+      EXPLORATION_CURSOR_KEY_FILE: /run/secrets/cursor.key
+      EXPLORATION_CURSOR_KEY_ID: "${EXPLORATION_CURSOR_KEY_ID:-v1}"
       MCP_BIND: "${SERVE_INGRESS_IP:?}:8080"
       MCP_HOST: "127.0.0.1:${PROXY_PORT:?}"
       MCP_ORIGIN: "https://127.0.0.1:${PROXY_PORT:?}"

@@ -163,6 +163,8 @@ def prepare(root):
       ssl_certificate_key /run/secrets/server.key;
       location = /mcp {{
         proxy_http_version 1.1;
+        proxy_ignore_client_abort off;
+        proxy_read_timeout 20s;
         proxy_set_header Host $http_host;
         proxy_set_header Forwarded "";
         proxy_set_header X-Forwarded-For "";

@@ -8,4 +8,9 @@ Allow revocation to override retained generations and cached contexts. Record th
 
 Phase 4 requires a versioned exploration grant for catalog and object output. Review metadata and approved history alongside each whole-closure, exact-leaf, or subtree grant. A structural ancestor carries its navigation name only when the selected commit contains an approved descendant. The ancestor tree OID is withheld unless that tree is fully approved. [Exploration contract](../exploration.md#output-approval)
 
+Version 2 exploration grants require separate search and history opt-ins. Review
+author and committer email addresses alongside other history metadata. Path
+grants apply to each side of a diff and each attributed blame line.
+[Phase 5 approvals](../mcp.md#approve-output-forms)
+
 [GitHub Docs upstream license summary](https://github.com/github/docs#license)

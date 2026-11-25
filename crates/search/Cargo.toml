@@ -11,6 +11,8 @@ base64.workspace = true
 gh-docs-core = { path = "../core" }
 gh-docs-git = { path = "../git" }
 gh-docs-storage = { path = "../storage" }
+grep-matcher.workspace = true
+grep-regex.workspace = true
 ring.workspace = true
 schemars.workspace = true
 serde.workspace = true

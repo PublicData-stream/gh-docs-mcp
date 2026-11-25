@@ -15,7 +15,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-pub(crate) struct Process {
+pub struct Process {
     child: Child,
     input: Option<ChildStdin>,
     pub(crate) output: BufReader<Output>,
@@ -73,7 +73,7 @@ impl Process {
         Ok(process)
     }
 
-    pub(crate) fn send(&mut self, mut bytes: &[u8]) -> io::Result<()> {
+    pub fn send(&mut self, mut bytes: &[u8]) -> io::Result<()> {
         let pipe = self
             .input
             .as_mut()
@@ -95,7 +95,11 @@ impl Process {
         Ok(())
     }
 
-    pub(crate) fn finish(mut self) -> io::Result<()> {
+    pub fn read_exact(&mut self, bytes: &mut [u8]) -> io::Result<()> {
+        self.output.read_exact(bytes)
+    }
+
+    pub fn finish(mut self) -> io::Result<()> {
         self.input.take();
         if self.output.read(&mut [0])? != 0 {
             return Err(io::Error::new(

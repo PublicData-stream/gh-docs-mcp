@@ -15,14 +15,14 @@ gh-docs-storage = { path = "../crates/storage" }
 gh-docs-sync = { path = "../crates/sync" }
 gh-docs-test-support = { path = "../crates/test-support", optional = true }
 rmcp.workspace = true
-schemars = { workspace = true, optional = true }
+schemars.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 
 [features]
 phase1-fixtures = ["dep:gh-docs-test-support"]
 phase2-fixtures = ["gh-docs-sync/fixtures"]
-phase4-fixtures = ["dep:schemars", "gh-docs-search/fixtures"]
+phase4-fixtures = ["gh-docs-search/fixtures"]
 
 [[bin]]
 name = "gh-docs-phase1-fixture"

@@ -28,7 +28,7 @@ APPROVAL = "/phase2-approval.json"
 
 @contextmanager
 def stack(tag, *, publication=False, fixture_setup=prepare, serve_target=None):
-    phase = 4 if serve_target == "phase4-serve" else 3 if publication else 2
+    phase = 5 if serve_target == "mcp-serve" else 4 if serve_target == "phase4-serve" else 3 if publication else 2
     project = f"ghdocs{phase}-{secrets.token_hex(5)}"
     root = Path(tempfile.mkdtemp(prefix=f"{project}-", dir="/tmp"))
     table = project.replace("-", "_")

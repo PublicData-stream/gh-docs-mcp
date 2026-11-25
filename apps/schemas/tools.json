@@ -1,0 +1,2491 @@
+[
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List reviewed active repository metadata in UUID order. Pages reflect the live catalog.",
+    "inputSchema": {
+      "$defs": {
+        "Page": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "query": {
+          "default": "",
+          "type": "string"
+        }
+      },
+      "title": "RepositorySearch",
+      "type": "object"
+    },
+    "name": "repository.search",
+    "outputSchema": {
+      "$defs": {
+        "Context": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "title": "Context",
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "code"
+            ]
+          },
+          "properties": {
+            "coverage": {
+              "type": "object"
+            },
+            "entries": {
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "next_cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "entries",
+            "coverage",
+            "next_cursor"
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "guidance": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "guidance"
+          ]
+        }
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read approved repository identity, policy, notice and active generation.",
+    "inputSchema": {
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "repository_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "repository_id"
+      ],
+      "title": "RepositoryInfo",
+      "type": "object"
+    },
+    "name": "repository.info",
+    "outputSchema": {
+      "$defs": {
+        "Context": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "title": "Context",
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "code"
+            ]
+          },
+          "properties": {
+            "generation_id": {
+              "type": "string"
+            },
+            "metadata_notice": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "metadata_notice"
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "guidance": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "guidance"
+          ]
+        }
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List the approved ref snapshot of a readable generation in raw-byte order.",
+    "inputSchema": {
+      "$defs": {
+        "Page": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "generation_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "repository_id": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "repository_id"
+      ],
+      "title": "Refs",
+      "type": "object"
+    },
+    "name": "git.refs",
+    "outputSchema": {
+      "$defs": {
+        "Context": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "title": "Context",
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "code"
+            ]
+          },
+          "properties": {
+            "coverage": {
+              "type": "object"
+            },
+            "entries": {
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "next_cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "entries",
+            "source",
+            "coverage",
+            "next_cursor"
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "guidance": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "guidance"
+          ]
+        }
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Resolve the default, an exact ref or a full OID to an immutable context reusable by other tools.",
+    "inputSchema": {
+      "$defs": {
+        "ByteString": {
+          "description": "Encode a name whose byte grammar is validated by its caller.",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "utf8",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "base64",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "Selector": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "ref",
+                  "type": "string"
+                },
+                "value": {
+                  "$ref": "#/$defs/ByteString"
+                }
+              },
+              "required": [
+                "kind",
+                "value"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "oid",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "value"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "default",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "generation_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "repository_id": {
+          "type": "string"
+        },
+        "selector": {
+          "$ref": "#/$defs/Selector"
+        }
+      },
+      "required": [
+        "repository_id",
+        "selector"
+      ],
+      "title": "Resolve",
+      "type": "object"
+    },
+    "name": "git.resolve",
+    "outputSchema": {
+      "$defs": {
+        "Context": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "title": "Context",
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "code"
+            ]
+          },
+          "properties": {
+            "context": {
+              "$ref": "#/$defs/Context"
+            },
+            "source": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "context",
+            "source"
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "guidance": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "guidance"
+          ]
+        }
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List approved tree paths, modes and object identities from a resolved context.",
+    "inputSchema": {
+      "$defs": {
+        "BytePath": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "utf8",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "base64",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "Context": {
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "type": "object"
+        },
+        "Page": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/Context"
+        },
+        "depth": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "root": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BytePath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "context"
+      ],
+      "title": "ListTree",
+      "type": "object"
+    },
+    "name": "git.ls_tree",
+    "outputSchema": {
+      "$defs": {
+        "Context": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "title": "Context",
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "code"
+            ]
+          },
+          "properties": {
+            "context": {
+              "$ref": "#/$defs/Context"
+            },
+            "coverage": {
+              "type": "object"
+            },
+            "entries": {
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "next_cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "context",
+            "source",
+            "entries",
+            "coverage",
+            "next_cursor"
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "guidance": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "guidance"
+          ]
+        }
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Match approved raw paths using a literal substring or an anchored byte glob.",
+    "inputSchema": {
+      "$defs": {
+        "BytePath": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "utf8",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "base64",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "ByteString": {
+          "description": "Encode a name whose byte grammar is validated by its caller.",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "utf8",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "base64",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "Context": {
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "type": "object"
+        },
+        "Page": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        },
+        "Pattern": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "literal",
+                  "type": "string"
+                },
+                "value": {
+                  "$ref": "#/$defs/ByteString"
+                }
+              },
+              "required": [
+                "kind",
+                "value"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "glob",
+                  "type": "string"
+                },
+                "value": {
+                  "$ref": "#/$defs/ByteString"
+                }
+              },
+              "required": [
+                "kind",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/Context"
+        },
+        "depth": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "pattern": {
+          "$ref": "#/$defs/Pattern"
+        },
+        "root": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BytePath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "context",
+        "pattern"
+      ],
+      "title": "Find",
+      "type": "object"
+    },
+    "name": "git.find",
+    "outputSchema": {
+      "$defs": {
+        "Context": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "title": "Context",
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "code"
+            ]
+          },
+          "properties": {
+            "context": {
+              "$ref": "#/$defs/Context"
+            },
+            "coverage": {
+              "type": "object"
+            },
+            "entries": {
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "next_cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "context",
+            "source",
+            "entries",
+            "coverage",
+            "next_cursor"
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "guidance": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "guidance"
+          ]
+        }
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read a literal approved blob path. Byte ranges are zero-based and half-open. Use base64 for arbitrary byte slices.",
+    "inputSchema": {
+      "$defs": {
+        "BytePath": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "utf8",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "base64",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "ByteRange": {
+          "additionalProperties": false,
+          "properties": {
+            "end": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "start": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "start",
+            "end"
+          ],
+          "type": "object"
+        },
+        "Context": {
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "type": "object"
+        },
+        "Encoding": {
+          "enum": [
+            "utf8",
+            "base64"
+          ],
+          "type": "string"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/Context"
+        },
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "encoding": {
+          "$ref": "#/$defs/Encoding",
+          "default": "utf8"
+        },
+        "path": {
+          "$ref": "#/$defs/BytePath"
+        },
+        "range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ByteRange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "context",
+        "path"
+      ],
+      "title": "Read",
+      "type": "object"
+    },
+    "name": "git.read",
+    "outputSchema": {
+      "$defs": {
+        "Context": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "title": "Context",
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "code"
+            ]
+          },
+          "properties": {
+            "context": {
+              "$ref": "#/$defs/Context"
+            },
+            "coverage": {
+              "type": "object"
+            },
+            "oid": {
+              "type": "string"
+            },
+            "source": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "context",
+            "source",
+            "oid",
+            "coverage"
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "guidance": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "guidance"
+          ]
+        }
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Search approved blobs at a resolved commit. Lines are one-based and original byte ranges are zero-based and half-open. A partial empty page leaves results unknown.",
+    "inputSchema": {
+      "$defs": {
+        "BytePath": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "utf8",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "base64",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "ByteString": {
+          "description": "Encode a name whose byte grammar is validated by its caller.",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "utf8",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "base64",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "Context": {
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "type": "object"
+        },
+        "Page": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/Context"
+        },
+        "context_lines": {
+          "default": 0,
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ignore_case": {
+          "default": false,
+          "type": "boolean"
+        },
+        "literal": {
+          "default": false,
+          "type": "boolean"
+        },
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "path_glob": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ByteString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "root": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BytePath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "context",
+        "pattern"
+      ],
+      "title": "Rg",
+      "type": "object"
+    },
+    "name": "git.rg",
+    "outputSchema": {
+      "$defs": {
+        "Context": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "title": "Context",
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "code"
+            ]
+          },
+          "properties": {
+            "context": {
+              "$ref": "#/$defs/Context"
+            },
+            "coverage": {
+              "type": "object"
+            },
+            "matches": {
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "next_cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "scan_complete": {
+              "type": "boolean"
+            },
+            "source": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "context",
+            "source",
+            "matches",
+            "coverage",
+            "scan_complete",
+            "next_cursor"
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "guidance": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "guidance"
+          ]
+        }
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "List approved commit metadata by graph distance and then native object ID. A literal path filters changes against the first parent.",
+    "inputSchema": {
+      "$defs": {
+        "BytePath": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "utf8",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "base64",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "Context": {
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "type": "object"
+        },
+        "Page": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/Context"
+        },
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BytePath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "context"
+      ],
+      "title": "Log",
+      "type": "object"
+    },
+    "name": "git.log",
+    "outputSchema": {
+      "$defs": {
+        "Context": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "title": "Context",
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "code"
+            ]
+          },
+          "properties": {
+            "context": {
+              "$ref": "#/$defs/Context"
+            },
+            "coverage": {
+              "type": "object"
+            },
+            "entries": {
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "next_cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "context",
+            "source",
+            "entries",
+            "coverage",
+            "next_cursor"
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "guidance": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "guidance"
+          ]
+        }
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read approved commit metadata and changes against the first or selected parent. Root commits use the empty tree.",
+    "inputSchema": {
+      "$defs": {
+        "BytePath": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "utf8",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "base64",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "Context": {
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "type": "object"
+        },
+        "Page": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/Context"
+        },
+        "context_lines": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "parent": {
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "path": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BytePath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "context"
+      ],
+      "title": "Show",
+      "type": "object"
+    },
+    "name": "git.show",
+    "outputSchema": {
+      "$defs": {
+        "Context": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "title": "Context",
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "code"
+            ]
+          },
+          "properties": {
+            "commit": {
+              "type": "object"
+            },
+            "context": {
+              "$ref": "#/$defs/Context"
+            },
+            "coverage": {
+              "type": "object"
+            },
+            "entries": {
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "next_cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "parent": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "context",
+            "source",
+            "commit",
+            "parent",
+            "entries",
+            "coverage",
+            "next_cursor"
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "guidance": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "guidance"
+          ]
+        }
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Compare two approved commits in one repository generation. Returns approved paths and bounded hunks or binary metadata.",
+    "inputSchema": {
+      "$defs": {
+        "BytePath": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "utf8",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "base64",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "Context": {
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "type": "object"
+        },
+        "Page": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "base": {
+          "$ref": "#/$defs/Context"
+        },
+        "context_lines": {
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "head": {
+          "$ref": "#/$defs/Context"
+        },
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "path": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BytePath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "base",
+        "head"
+      ],
+      "title": "Diff",
+      "type": "object"
+    },
+    "name": "git.diff",
+    "outputSchema": {
+      "$defs": {
+        "Context": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "title": "Context",
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "code"
+            ]
+          },
+          "properties": {
+            "base": {
+              "$ref": "#/$defs/Context"
+            },
+            "context": {
+              "$ref": "#/$defs/Context"
+            },
+            "coverage": {
+              "type": "object"
+            },
+            "entries": {
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "next_cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "context",
+            "source",
+            "base",
+            "entries",
+            "coverage",
+            "next_cursor"
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "guidance": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "guidance"
+          ]
+        }
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Attribute approved lines at one literal path along first parents. Line ranges are one-based and half-open. Coverage identifies unresolved lines.",
+    "inputSchema": {
+      "$defs": {
+        "BytePath": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "utf8",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "base64",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "ByteRange": {
+          "additionalProperties": false,
+          "properties": {
+            "end": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "start": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "start",
+            "end"
+          ],
+          "type": "object"
+        },
+        "Context": {
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "type": "object"
+        },
+        "Page": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/Context"
+        },
+        "line_range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ByteRange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "path": {
+          "$ref": "#/$defs/BytePath"
+        }
+      },
+      "required": [
+        "context",
+        "path"
+      ],
+      "title": "Blame",
+      "type": "object"
+    },
+    "name": "git.blame",
+    "outputSchema": {
+      "$defs": {
+        "Context": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "title": "Context",
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "code"
+            ]
+          },
+          "properties": {
+            "context": {
+              "$ref": "#/$defs/Context"
+            },
+            "coverage": {
+              "type": "object"
+            },
+            "entries": {
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "next_cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "source": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "context",
+            "source",
+            "entries",
+            "coverage",
+            "next_cursor"
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "guidance": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "guidance"
+          ]
+        }
+      ],
+      "type": "object"
+    }
+  }
+]

@@ -68,9 +68,13 @@ def container(name, image, uid, command, mounts, memory="256Mi", cpu="1", env=No
     return spec
 
 
-def resources(root, sync, upstream, postgres, serve=None, *, explore=False):
+def resources(root, sync, upstream, postgres, serve=None, *, explore=False, wire=False):
     fixture = root / "fixture"
-    prepare(fixture)
+    if wire:
+        from git_fixtures import prepare as prepare_history
+        prepare_history(fixture)
+    else:
+        prepare(fixture)
     archive = root / "fixture.tar.gz"
     with tarfile.open(archive, "w:gz") as bundle:
         for path in ("repositories", "tls", "mode"):
@@ -79,7 +83,10 @@ def resources(root, sync, upstream, postgres, serve=None, *, explore=False):
     passwords = {f"{role}-password": secrets.token_hex(24)
                  for role in ("admin", "serve", "migrate", "sync")}
     policies = {fmt: approval(fmt) for fmt in REPOS}
-    if explore:
+    if wire:
+        from git_fixtures import policy
+        policies = {fmt: policy(fmt) for fmt in REPOS}
+    elif explore:
         for policy in policies.values():
             policy["exploration"] = {"version": 1, "metadata_notice": "Synthetic metadata",
                                      "scope": {"kind": "whole", "notice": "Synthetic source bytes"}}
@@ -157,20 +164,24 @@ def resources(root, sync, upstream, postgres, serve=None, *, explore=False):
         sync_container["volumeMounts"].append(mount("handoff", "/handoff"))
         oracle = [json.loads((fixture / f"{fmt}-oracle.json").read_text()) for fmt in REPOS]
         reads = [
-            f"gh-docs-phase3-fixture read {repo} active {proof['initial']}"
+            f"gh-docs-phase3-fixture read {repo} active {proof['head' if wire else 'initial']}"
             for (repo, _), proof in zip(REPOS.values(), oracle, strict=True)
         ]
         serve_command = ["test ! -w /git-store", "test ! -r /git-store/.publication",
                          "test ! -e /git-sync-private", *reads]
         serve_env = db_client.copy()
         credentials = {"db-ca.crt": ca, "db-password": passwords["serve-password"]}
-        if explore:
+        if explore or wire:
             serve_env.update(EXPLORATION_CURSOR_KEY_FILE="/run/secrets/cursor.key",
                              EXPLORATION_CURSOR_KEY_ID="fixture-v1")
             credentials["cursor.key"] = secrets.token_bytes(48)
             for (fmt, (repo, _)), proof in zip(REPOS.items(), oracle, strict=True):
                 context = {"repository_id": repo, "generation_id": "0",
-                           "object_format": fmt, "commit_oid": proof["initial"]}
+                           "object_format": fmt, "commit_oid": proof["head" if wire else "initial"]}
+                if wire:
+                    from git_fixtures import PHRASE
+                    serve_command.extend(wire_commands(fmt, context, PHRASE))
+                    continue
                 request = {"tool": "git.read", "arguments": {"context": context,
                     "path": {"encoding": "utf8", "value": "original.bin"},
                     "range": {"start": 0, "end": 32}, "encoding": "base64"}}
@@ -178,6 +189,13 @@ def resources(root, sync, upstream, postgres, serve=None, *, explore=False):
                 serve_command.append(
                     f"printf '%s' {shlex.quote(json.dumps(request))} | gh-docs-phase4-fixture | "
                     f"grep -F {shlex.quote(json.dumps('data') + ':' + json.dumps(expected))}")
+        if wire:
+            serve_env.update(MCP_BIND="127.0.0.1:8080", MCP_HOST="127.0.0.1:8080",
+                             MCP_ORIGIN="http://127.0.0.1:8080", HEALTH_BIND="127.0.0.1:8081")
+            serve_command[0:0] = [
+                """gh-docs-serve & server=$!; trap 'kill "$server"; wait "$server" || true' EXIT""",
+                "timeout 15 sh -c 'until wget -qO /dev/null http://127.0.0.1:8081/healthz; do sleep 1; done'",
+            ]
         containers.append(container("read", serve, 10001, ["/bin/sh", "-ec",
             "timeout 75 sh -ec 'while ! test -f /handoff/published; do sleep 1; done'; "
             + "; ".join(serve_command)],
@@ -200,8 +218,33 @@ def resources(root, sync, upstream, postgres, serve=None, *, explore=False):
     return {"apiVersion": "v1", "kind": "List", "items": [*objects, job]}
 
 
-def smoke(args, serve=None, *, explore=False):
-    phase = 4 if explore else 3 if serve else 2
+def wire_commands(fmt, context, phrase):
+    version = "2026-07-28"
+    metadata = {
+        "io.modelcontextprotocol/protocolVersion": version,
+        "io.modelcontextprotocol/clientCapabilities": {},
+    }
+    commands = []
+    for name, args, expected in [
+        ("git.rg", {"context": context, "pattern": phrase, "literal": True}, '"returned_count":2'),
+        ("git.log", {"context": context}, '"returned_count":4'),
+    ]:
+        request = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
+                              "params": {"name": name, "arguments": args, "_meta": metadata}})
+        headers = ["Content-Type: application/json", "Accept: application/json, text/event-stream",
+                   f"Mcp-Protocol-Version: {version}", "Mcp-Method: tools/call", f"Mcp-Name: {name}"]
+        command = ["wget", "-qO", "-", "--post-data", request]
+        for header in headers:
+            command.extend(["--header", header])
+        command.append("http://127.0.0.1:8080/mcp")
+        commands.append(f"""result=$({shlex.join(command)}); printf '%s' "$result" | grep -qF {shlex.quote(expected)}""")
+        commands.append("""printf '%s' "$result" | grep -qF '"isError":false'""")
+    commands.append(f"echo 'Phase 5 {fmt} search and history passed'")
+    return commands
+
+
+def smoke(args, serve=None, *, explore=False, wire=False):
+    phase = 5 if wire else 4 if explore else 3 if serve else 2
     profile = f"ghdocs{phase}-{secrets.token_hex(5)}"
     root = Path(tempfile.mkdtemp(prefix=f"{profile}-minikube-", dir="/tmp"))
     environment = {**os.environ, "MINIKUBE_HOME": str(root), "KUBECONFIG": str(root / "kubeconfig"),
@@ -233,7 +276,7 @@ def smoke(args, serve=None, *, explore=False):
         execute([*docker, "image", "save", "-o", bundle, *images], timeout=150)
         manifest = root / "job.json"
         manifest.write_text(json.dumps(resources(
-            root, args.sync_image, args.upstream_image, postgres, serve, explore=explore)))
+            root, args.sync_image, args.upstream_image, postgres, serve, explore=explore, wire=wire)))
         started = True
         execute([*minikube, "start", "--driver=docker", "--container-runtime=containerd", "--nodes=1",
                  "--cpus=4", "--memory=6144", "--listen-address=127.0.0.1", "--install-addons=false",

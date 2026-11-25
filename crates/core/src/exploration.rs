@@ -9,6 +9,8 @@ pub struct ExplorationApproval {
     pub version: u8,
     pub metadata_notice: String,
     pub scope: Scope,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub outputs: Option<Outputs>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -26,10 +28,18 @@ pub struct PathGrant {
     pub notice: String,
 }
 
+#[derive(Debug, Default, Clone, Copy, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Outputs {
+    pub search: bool,
+    pub history: bool,
+}
+
 #[derive(Debug)]
 pub struct Policy {
     pub metadata_notice: String,
     pub scope: ApprovedScope,
+    pub outputs: Outputs,
 }
 
 #[derive(Debug)]
@@ -61,7 +71,7 @@ fn validate_notice(text: &str) -> Result<(), &'static str> {
 
 impl ExplorationApproval {
     pub fn validate(&self) -> Result<Policy, &'static str> {
-        if self.version != 1 {
+        if !matches!((self.version, self.outputs), (1, None) | (2, _)) {
             return Err("unsupported exploration approval version");
         }
         validate_notice(&self.metadata_notice)?;
@@ -95,6 +105,7 @@ impl ExplorationApproval {
         Ok(Policy {
             metadata_notice: self.metadata_notice.clone(),
             scope,
+            outputs: self.outputs.unwrap_or_default(),
         })
     }
 }

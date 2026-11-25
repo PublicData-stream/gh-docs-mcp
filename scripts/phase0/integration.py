@@ -44,13 +44,17 @@ def run(args, *, expected=0, timeout=30, env=None, **kwargs):
 
 
 class Stack:
-    def __init__(self, root, project, image_tag):
+    def __init__(self, root, project, image_tag, *, mcp_fixture=False):
         self.root = root
         self.env = fixtures.prepare(root)
         self.compose_command = [
             *DOCKER, "compose", "-f", str(ROOT / "compose.yml"), "-p", project,
             "--profile", "feed", "--profile", "operator", "--profile", "fixtures",
         ]
+        if mcp_fixture:
+            override = root / "phase0-mcp.yml"
+            override.write_text("services:\n  serve:\n    command: [--phase0-mcp-fixture]\n")
+            self.compose_command.extend(["-f", str(override)])
         self.context = {**os.environ, **self.env, "GH_DOCS_IMAGE_TAG": image_tag}
         self.ids = {}
 
@@ -358,7 +362,7 @@ def main():
     root = Path(tempfile.mkdtemp(prefix=f"{project}-", dir="/tmp"))
     stack, installed, built_images = None, False, []
     try:
-        stack = Stack(root, project, image_tag)
+        stack = Stack(root, project, image_tag, mcp_fixture=True)
         if not args.skip_build:
             for role in ("serve", "sync", "feed"):
                 image = f"gh-docs-mcp-{role}:{image_tag}"
