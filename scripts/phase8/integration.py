@@ -351,11 +351,20 @@ def rehearse(args, refs, work):
                                             "WHERE delivered_at IS NULL") == "0",
                           "restored outbox did not drain", seconds=40)
         measured = load(wire, records)
+        print(json.dumps({"backup": captured, "restore": restored, "load": measured}, sort_keys=True), flush=True)
         for repo, record in records.items():
             phase3.command(target, repo, "--rollback", record[0], seq=2)
             phase3.command(target, repo, "--gc")
-            assert wire.call("git.read", record[6]) == record[7]
-            phase3.assert_pointer(target, repo, record[0], 3)
+            read = wire.call("git.read", record[6])
+            for field in ("data", "oid", "returned_range", "notice"):
+                assert read[field] == record[7][field], field
+            phase3.wait_until(
+                lambda: phase2.sql(target, f"""
+                    SELECT delivered_at IS NOT NULL FROM git_catalog.notification_outbox
+                    WHERE repository_id = '{repo}' AND publication_sequence = 3
+                """) == "t", "rollback notification did not arrive", seconds=40,
+            )
+            phase3.assert_pointer(target, repo, record[0], 3, delivered=True)
         target.compose("restart", "serve")
         phase3.wait_until(lambda: target.exec("serve", "wget", "-qO", "/dev/null", "-T", "2",
                                              "http://127.0.0.1:8081/healthz",

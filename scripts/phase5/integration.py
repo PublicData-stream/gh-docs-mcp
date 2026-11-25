@@ -14,6 +14,7 @@ import shutil
 import socket
 import ssl
 import sys
+import tempfile
 import time
 
 from jsonschema import Draft202012Validator
@@ -331,10 +332,11 @@ def retirement(wire, upstream, endpoint, ctx, token):
 
 
 def sdk(wire, node, client_dir, repo, generation=None):
-    script = client_dir / "phase5-sdk.mjs"
-    shutil.copyfile(ROOT / "scripts/phase5/sdk.mjs", script)
-    os.chown(script, int(os.environ["SUDO_UID"]), int(os.environ["SUDO_GID"]))
+    with tempfile.NamedTemporaryFile(dir=client_dir, prefix="phase5-sdk-", suffix=".mjs", delete=False) as file:
+        script = Path(file.name)
     try:
+        shutil.copyfile(ROOT / "scripts/phase5/sdk.mjs", script)
+        os.chown(script, int(os.environ["SUDO_UID"]), int(os.environ["SUDO_GID"]))
         with wire.ca.open("rb") as ca:
             env = {**os.environ, "NODE_EXTRA_CA_CERTS": f"/proc/self/fd/{ca.fileno()}"}
             args = [node, script, f"https://{wire.host}:{wire.port}/mcp", repo]
