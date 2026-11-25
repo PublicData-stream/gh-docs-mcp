@@ -1,4 +1,4 @@
-use std::{fs::File, io::Read, sync::Arc};
+use std::{fs::File, io::Read, net::SocketAddr, sync::Arc};
 
 use gh_docs_core::{Result, required};
 use gh_docs_mcp::{
@@ -85,7 +85,16 @@ async fn run(mode: Option<&str>) -> Result<()> {
     let health = health(health_listener().await?);
     let config = StreamableHttpServerConfig::default();
     let shutdown = config.cancellation_token.clone();
-    let server = axum::serve(api, mcp::router(host, origin, explorer.clone(), config));
+    let router = mcp::router(host.clone(), origin, explorer.clone(), config);
+    let router = match std::env::var("MCP_PROXY_IP") {
+        Ok(peer) => mcp::with_trusted_proxy(router, peer.parse()?, &host)?,
+        Err(std::env::VarError::NotPresent) => router,
+        Err(error) => return Err(error.into()),
+    };
+    let server = axum::serve(
+        api,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+    );
     let notification = async {
         let Some(keys) = notify_keys else {
             return std::future::pending().await;

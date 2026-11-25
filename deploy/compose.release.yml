@@ -5,6 +5,7 @@ services:
     environment:
       MCP_HOST: "${GH_DOCS_MCP_AUTHORITY:?}"
       MCP_ORIGIN: "https://${GH_DOCS_MCP_AUTHORITY:?}"
+      MCP_PROXY_IP: "${PROXY_IP:?}"
 
   sync:
     image: "${GH_DOCS_SYNC_IMAGE:?Use the qualified release receipt}"

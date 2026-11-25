@@ -3,6 +3,7 @@
 
 use std::{
     borrow::Cow,
+    net::{IpAddr, SocketAddr},
     sync::{Arc, LazyLock, Mutex},
     time::Instant,
 };
@@ -10,8 +11,8 @@ use std::{
 use axum::{
     Json, Router,
     body::{Body, to_bytes},
-    extract::Request,
-    http::{Method, StatusCode, header},
+    extract::{ConnectInfo, Request},
+    http::{HeaderMap, HeaderValue, Method, StatusCode, header, uri::Authority},
     middleware::{self, Next},
     response::{IntoResponse, Response},
 };
@@ -355,6 +356,51 @@ pub fn router(
                 next.run(request).await
             }
         }))
+}
+
+/// OxiBelt forwards a normalized Host and the original effective TLS port.
+/// Trust those fields only on the dedicated proxy connection.
+pub fn with_trusted_proxy(
+    router: Router,
+    peer: IpAddr,
+    expected: &str,
+) -> gh_docs_core::Result<Router> {
+    let authority: Authority = expected.parse()?;
+    let host = HeaderValue::from_str(authority.host())?;
+    let port = HeaderValue::from_str(&authority.port_u16().unwrap_or(443).to_string())?;
+    let authority = HeaderValue::from_str(expected)?;
+    Ok(router.layer(middleware::from_fn(
+        move |mut request: Request, next: Next| {
+            let host = host.clone();
+            let port = port.clone();
+            let authority = authority.clone();
+            async move {
+                let trusted_peer = request
+                    .extensions()
+                    .get::<ConnectInfo<SocketAddr>>()
+                    .is_some_and(|info| info.0.ip() == peer);
+                let headers = request.headers();
+                if !trusted_peer
+                    || !single_header(headers, "host", &host)
+                    || !single_header(headers, "x-forwarded-port", &port)
+                    || !single_header(
+                        headers,
+                        "x-forwarded-proto",
+                        &HeaderValue::from_static("https"),
+                    )
+                {
+                    return StatusCode::FORBIDDEN.into_response();
+                }
+                request.headers_mut().insert(header::HOST, authority);
+                next.run(request).await
+            }
+        },
+    )))
+}
+
+fn single_header(headers: &HeaderMap, name: &'static str, value: &HeaderValue) -> bool {
+    let mut values = headers.get_all(name).iter();
+    values.next() == Some(value) && values.next().is_none()
 }
 
 // Keep malformed messages and legacy lifecycle requests out of the SDK dispatch.

@@ -270,14 +270,15 @@ def restore(project, store, bundle, expected):
         if query(connection, "SELECT to_regnamespace('git_catalog') IS NULL "
                              "AND to_regnamespace('foundation') IS NULL") != "t":
             raise ValueError("restore requires a fresh provisioned database")
+        # Finish the verified store before the catalog can admit any reader.
+        copy_store(bundle / "store", store, record["store"])
+        if verify(bundle, expected) != record:
+            raise ValueError("backup changed during restore")
         with (bundle / "catalog.dump").open("rb") as stream:
             project.postgres("pg_restore", "--single-transaction", "--exit-on-error",
                              "-U", "postgres", "-d", "gh_docs", stdin=stream)
         if json.loads(query(connection, CATALOG)) != record["catalog"]:
             raise ValueError("restored catalog differs from backup")
-        copy_store(bundle / "store", store, record["store"])
-        if verify(bundle, expected) != record:
-            raise ValueError("backup changed during restore")
         project.assert_offline()
     for repository in record["catalog"]["repositories"]:
         identity = str(UUID(repository["repository_id"]))

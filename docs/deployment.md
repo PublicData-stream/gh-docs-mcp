@@ -11,6 +11,9 @@ amd64. See the [release gate](release-readiness.md) for qualification status.
    `GH_DOCS_SERVE_IMAGE`, `GH_DOCS_SYNC_IMAGE`, and `GH_DOCS_FEED_IMAGE` to the full
    registry references with `@sha256:<index digest>`. Set
    `GH_DOCS_MCP_AUTHORITY` to the TLS name and port used by clients.
+   The overlay trusts only the dedicated OxiBelt ingress IP. Serve verifies
+   the normalized hostname, effective TLS port and scheme from that peer
+   before reconstructing the configured Host for MCP validation.
 2. Supply the rootful Compose address and bridge variables and the absolute
    `FIXTURES` bind root through a private environment file. Despite its name,
    `FIXTURES` holds the deployment's state and role directories. Use dedicated,

@@ -109,8 +109,20 @@ def open_stack(stack):
 def proxy_probes(wire):
     authority = f"{wire.host}:{wire.port}"
     wire.send("tools/list", {}, changes={"Origin": "https://" + authority})
+    discover = phase5.message("server/discover")
+    h2 = phase0.run([
+        "curl", "--noproxy", "*", "--http2", "--fail", "--silent", "--show-error", "--max-time", "10",
+        "--cacert", wire.ca, "-H", "Content-Type: application/json",
+        "-H", "Accept: application/json, text/event-stream",
+        "-H", f"MCP-Protocol-Version: {phase5.VERSION}", "-H", "Mcp-Method: server/discover",
+        "--data-binary", json.dumps(discover), "--write-out", "\n%{http_version}",
+        f"https://{authority}/mcp",
+    ]).stdout
+    body, version = h2.rsplit("\n", 1)
+    assert version == "2" and json.loads(body)["result"]["supportedVersions"] == [phase5.VERSION]
     wire.send("tools/list", {}, changes={
         "Forwarded": "host=other.invalid", "X-Forwarded-Host": "other.invalid",
+        "X-Forwarded-Port": "1", "X-Forwarded-Proto": "http",
     })
     # Incoming origin and authority remain independently validated.
     wire.send("tools/list", {}, status=403, changes={
@@ -118,6 +130,7 @@ def proxy_probes(wire):
     })
     wire.send("tools/list", {}, status=403, changes={
         "Host": f"{wire.host}:1", "X-Forwarded-Host": authority,
+        "X-Forwarded-Port": str(wire.port),
     })
     for path in ("/", "/mcp/other", "/healthz", "/metrics", "/internal/v1/identify", "/admin/v1/status"):
         with closing(http.client.HTTPSConnection(wire.host, wire.port, context=wire.ssl, timeout=5)) as client:

@@ -121,9 +121,9 @@ PostgreSQL Unix socket through Compose and keep its host ports private.
    private ingress closed. Provision independent TLS, DB and HMAC secrets
    and a new cursor key and key ID. Start only PostgreSQL.
 4. Verify the copied bundle using the independently held manifest digest.
-   Run `restore` with that digest. It restores into the un-migrated database
-   with object owners and grants, recreates lock files in the empty store and
-   runs fenced recovery including strict fsck, manifests, retention roots
+   Run `restore` with that digest. It recreates lock files and verifies the
+   copied store before restoring the catalog with its object owners and
+   grants. Fenced recovery then checks strict fsck, manifests, retention roots
    and pointers. On failure, retain the closed destination for investigation
    and retry on fresh volumes after repair.
 5. Reapply revocations made after capture, apply any compatible migration,
