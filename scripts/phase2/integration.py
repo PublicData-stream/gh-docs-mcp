@@ -233,8 +233,10 @@ def interruption(stack, repository, endpoint, control, point):
 
 def concurrent_admission(stack, repository, endpoint, upstream):
     other = REPOS["sha256"][0]
-    git(repo_path(upstream, "sha256"), "update-ref", "refs/heads/main",
-        commit(repo_path(upstream, "sha256"), "independent delayed update")[0])
+    # Both jobs need fresh objects to enter the delayed fetch path.
+    for fmt in ("sha1", "sha256"):
+        origin = repo_path(upstream, fmt)
+        git(origin, "update-ref", "refs/heads/main", commit(origin, f"{fmt} delayed update")[0])
     (upstream / "mode").write_text("delay")
     def command(repo):
         return [*stack.compose_command, "exec", "-T", "sync", "gh-docs-phase2-fixture", repo, endpoint, CA]
