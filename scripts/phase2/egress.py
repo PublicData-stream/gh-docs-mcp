@@ -1,4 +1,4 @@
-"""Install the existing role firewall with explicit sync DNS and HTTPS destinations."""
+"""Install the existing role firewall with explicit control, DNS and HTTPS edges."""
 
 import argparse
 from ipaddress import ip_address, ip_network
@@ -39,6 +39,9 @@ def main():
     parser.add_argument("--output-dir", type=Path)
     parser.add_argument("--resolver", type=ip_address)
     parser.add_argument("--https", action="append", type=ip_network, default=[])
+    parser.add_argument("--control", action="store_true")
+    parser.add_argument("--feed-resolver", type=ip_address)
+    parser.add_argument("--feed-https", action="append", type=ip_network, default=[])
     args = parser.parse_args()
     if not re.fullmatch("[a-zA-Z][a-zA-Z0-9_]{0,31}", args.table):
         parser.error("invalid project nftables table")
@@ -49,11 +52,16 @@ def main():
         parser.error("install requires --compose-env and --output-dir")
     if bool(args.https) != (args.resolver is not None):
         parser.error("enable sync DNS and HTTPS together")
-    for net in args.https:
+    if bool(args.feed_https) != (args.feed_resolver is not None):
+        parser.error("enable feed DNS and HTTPS together")
+    if args.feed_https and not args.control:
+        parser.error("feed HTTPS requires the control links")
+    for net in (*args.https, *args.feed_https):
         if net.prefixlen == 0 or not net.network_address.is_global or not net.broadcast_address.is_global:
             parser.error("an HTTPS rule must name a public destination range")
     firewall.install(args.table, environment(args.compose_env), args.output_dir,
-                     sync_https=args.https, sync_resolver=args.resolver)
+                     sync_https=args.https, sync_resolver=args.resolver, control=args.control,
+                     feed_https=args.feed_https, feed_resolver=args.feed_resolver)
 
 
 if __name__ == "__main__":

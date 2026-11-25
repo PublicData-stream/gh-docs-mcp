@@ -1,5 +1,5 @@
 use gh_docs_core::Result;
-use gh_docs_mcp::{health, health_listener};
+use gh_docs_mcp::{control, health, health_listener, scheduler};
 use gh_docs_storage::connect;
 use gh_docs_sync::{publication, supervisor};
 
@@ -25,6 +25,50 @@ async fn main() -> Result<()> {
         drop(client);
         driver.await?;
         return result;
+    }
+    if let [child, flag, repository, repo, job, id] = args.as_slice()
+        && child == supervisor::CHILD
+        && flag == "--scheduled-reconcile"
+        && repository == "--repository"
+        && job == "--job"
+    {
+        let lifeline = supervisor::child_lifeline()?;
+        let (client, driver) = connect("gh_docs_sync").await?;
+        let result = gh_docs_sync::reconcile_job(
+            &client,
+            repo.parse()?,
+            control::fixture()?,
+            lifeline,
+            Some(id.parse()?),
+        )
+        .await;
+        drop(client);
+        driver.await?;
+        return result;
+    }
+    if let [flag, repository, repo, rest @ ..] = args.as_slice()
+        && repository == "--repository"
+        && matches!(flag.as_str(), "--pause" | "--resume" | "--schedule-status")
+    {
+        let expected = match (flag.as_str(), rest) {
+            ("--pause" | "--schedule-status", []) => None,
+            ("--resume", [selector, value]) if selector == "--expect-sequence" => {
+                let number: i64 = value.parse()?;
+                if number < 0 || number.to_string() != *value {
+                    return Err("expected a canonical nonnegative BIGINT".into());
+                }
+                Some(number)
+            }
+            _ => return Err("invalid scheduler arguments".into()),
+        };
+        println!(
+            "{}",
+            scheduler::operator(repo.parse()?, flag, expected).await?
+        );
+        return Ok(());
+    }
+    if args.is_empty() && control::enabled()? {
+        return scheduler::run().await;
     }
     if matches!(args.as_slice(), [flag] if flag == "--migrate") {
         let (mut client, driver) = connect("gh_docs_migrate").await?;

@@ -1,6 +1,8 @@
 //! The Phase 0 entry points share loopback health and role probes.
 
+pub mod control;
 pub mod mcp;
+pub mod scheduler;
 
 use axum::{Router, http::StatusCode, routing::get};
 use gh_docs_core::{Result, health_bind};

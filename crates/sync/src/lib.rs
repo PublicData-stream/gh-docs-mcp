@@ -2,6 +2,7 @@
 
 mod approval;
 mod candidate;
+pub mod observation;
 mod private;
 pub mod publication;
 pub mod supervisor;
@@ -27,6 +28,7 @@ use crate::{
     candidate::{Baseline, Verified},
     upstream::{TransferError, Upstream},
 };
+pub use private::concurrency;
 pub use upstream::Fixture;
 
 pub async fn register(client: &Client, file: &Path) -> Result<()> {
@@ -53,7 +55,17 @@ pub async fn reconcile(
     client: &Client,
     repository: RepositoryId,
     fixture: Option<Fixture>,
+    lifeline: tokio::net::UnixStream,
+) -> Result<()> {
+    reconcile_job(client, repository, fixture, lifeline, None).await
+}
+
+pub async fn reconcile_job(
+    client: &Client,
+    repository: RepositoryId,
+    fixture: Option<Fixture>,
     mut lifeline: tokio::net::UnixStream,
+    scheduled: Option<Uuid>,
 ) -> Result<()> {
     if unsafe { libc::prctl(libc::PR_SET_CHILD_SUBREAPER, 1) } != 0 {
         return Err("could not establish Git process supervision".into());
@@ -81,13 +93,25 @@ pub async fn reconcile(
     let approval = approval::load(client, repository).await?;
     writer_advisory_fence(client, repository, LockScope::Coordinator).await?;
     let (_, source, format) = approval.validate()?;
-    let job: Uuid = client
-        .query_one(
-            "SELECT git_catalog.start_reconcile($1,$2,$3)",
-            &[&repository.uuid(), &source, &approval.version],
-        )
-        .await?
-        .get(0);
+    let job: Uuid = match scheduled {
+        Some(id) => {
+            client
+                .query_one(
+                    "SELECT git_catalog.start_scheduled_reconcile($1,$2,$3,$4)",
+                    &[&id, &repository.uuid(), &source, &approval.version],
+                )
+                .await?
+        }
+        None => {
+            client
+                .query_one(
+                    "SELECT git_catalog.start_reconcile($1,$2,$3)",
+                    &[&repository.uuid(), &source, &approval.version],
+                )
+                .await?
+        }
+    }
+    .get(0);
     let deadline =
         tokio::time::Instant::now() + Duration::from_secs(approval.limits.deadline_seconds);
     let mut attempts = 1_i32;
@@ -104,6 +128,7 @@ pub async fn reconcile(
             &approval,
             job,
             fixture,
+            scheduled,
             deadline,
             &mut attempts,
         );
@@ -128,13 +153,27 @@ pub async fn reconcile(
             // A commit may have completed even if its response did not arrive.
             // The SQL transition only affects a still-running job. The next
             // reconciliation consults the catalog before touching its bytes.
-            let recorded = client
-                .query_one(
-                    "SELECT git_catalog.fail_reconcile($1,$2,$3)",
-                    &[&job, &error.reason, &attempts],
-                )
-                .await
-                .is_ok_and(|row| row.get(0));
+            let recorded = if scheduled.is_some() {
+                let retry = error.retry.map(|delay| {
+                    i64::try_from(delay.as_secs())
+                        .unwrap_or(i64::MAX)
+                        .min(253_402_300_799)
+                });
+                client
+                    .query_one(
+                        "SELECT git_catalog.fail_scheduled_reconcile($1,$2,$3,$4)",
+                        &[&job, &error.reason, &attempts, &retry],
+                    )
+                    .await
+            } else {
+                client
+                    .query_one(
+                        "SELECT git_catalog.fail_reconcile($1,$2,$3)",
+                        &[&job, &error.reason, &attempts],
+                    )
+                    .await
+            }
+            .is_ok_and(|row| row.get(0));
             println!(
                 "{}",
                 json!({"job":job,"outcome":"failed","reason":error.reason,"incident_recorded":recorded})
@@ -257,6 +296,7 @@ async fn prepare_and_seal(
     approval: &Approval,
     job: Uuid,
     fixture: Option<Fixture>,
+    scheduled: Option<Uuid>,
     deadline: tokio::time::Instant,
     attempts: &mut i32,
 ) -> std::result::Result<Value, TransferError> {
@@ -392,21 +432,29 @@ async fn prepare_and_seal(
     if let Some(fixture) = &fixture {
         fixture.terminate_at("sealed");
     }
+    let logical_bytes = logical.as_slice();
+    let observation_bytes = observation.as_slice();
+    let pack_bytes = verified.pack.as_slice();
+    let default_bytes = verified.default.bytes();
+    let mut parameters: Vec<&(dyn tokio_postgres::types::ToSql + Sync)> = vec![
+        &job,
+        &logical_bytes,
+        &observation_bytes,
+        &pack_bytes,
+        &default_bytes,
+        &verified.snapshot,
+        &proof,
+        &observed,
+        attempts,
+    ];
+    let sql = if let Some(ref scheduled) = scheduled {
+        parameters.insert(0, scheduled);
+        "SELECT git_catalog.seal_scheduled_candidate($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)"
+    } else {
+        "SELECT git_catalog.seal_candidate($1,$2,$3,$4,$5,$6,$7,$8,$9)"
+    };
     let generation: Option<i64> = db
-        .query_one(
-            "SELECT git_catalog.seal_candidate($1,$2,$3,$4,$5,$6,$7,$8,$9)",
-            &[
-                &job,
-                &&logical[..],
-                &&observation[..],
-                &&verified.pack[..],
-                &verified.default.bytes(),
-                &verified.snapshot,
-                &proof,
-                &observed,
-                attempts,
-            ],
-        )
+        .query_one(sql, &parameters)
         .await
         .map_err(|_| TransferError::permanent("seal_unconfirmed"))?
         .get(0);

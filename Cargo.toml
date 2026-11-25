@@ -13,6 +13,9 @@ publish = false
 axum = "=0.8.9"
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+getrandom = "=0.4.3"
+hmac = "=0.13.0"
+httparse = "=1.10.1"
 grep-matcher = "=0.1.10"
 grep-regex = "=0.1.15"
 hickory-resolver = "=0.26.2"
@@ -28,4 +31,4 @@ sha2 = "0.11"
 tokio = { version = "1", features = ["io-util", "macros", "net", "process", "rt-multi-thread", "signal", "sync", "time"] }
 tokio-postgres = { version = "0.7", features = ["with-uuid-1", "with-serde_json-1"] }
 tokio-postgres-rustls = { version = "0.14", default-features = false, features = ["ring"] }
-uuid = { version = "1", features = ["serde"] }
+uuid = { version = "1", features = ["serde", "v7"] }

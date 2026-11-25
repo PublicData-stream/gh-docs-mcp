@@ -8,6 +8,14 @@ publish.workspace = true
 
 [dependencies]
 axum.workspace = true
+base64.workspace = true
+getrandom.workspace = true
+hmac.workspace = true
+httparse.workspace = true
+serde.workspace = true
+sha2.workspace = true
+tokio-postgres.workspace = true
+uuid.workspace = true
 gh-docs-core = { path = "../crates/core" }
 gh-docs-git = { path = "../crates/git" }
 gh-docs-search = { path = "../crates/search" }
@@ -23,6 +31,7 @@ tokio.workspace = true
 phase1-fixtures = ["dep:gh-docs-test-support"]
 phase2-fixtures = ["gh-docs-sync/fixtures"]
 phase4-fixtures = ["gh-docs-search/fixtures"]
+phase6-fixtures = ["gh-docs-sync/fixtures"]
 
 [[bin]]
 name = "gh-docs-phase1-fixture"

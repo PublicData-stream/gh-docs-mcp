@@ -160,7 +160,7 @@ impl<'a> Upstream<'a> {
         if self.requests > 48 || self.remaining == 0 {
             return Err(TransferError::permanent("transfer_budget"));
         }
-        let (client, base) = self.client().await?;
+        let (client, base) = client(self.approval, self.fixture.as_ref()).await?;
         loop {
             let row = self
                 .database
@@ -292,80 +292,81 @@ impl<'a> Upstream<'a> {
         worker::broker_end(channel).await.map_err(|_| invalid())?;
         Ok(())
     }
-
-    async fn client(&self) -> std::result::Result<(Client, String), TransferError> {
-        let host = self.approval.host();
-        let (base, addresses, fixture_certificate) = if let Some(fixture) = &self.fixture {
-            #[cfg(feature = "fixtures")]
-            {
-                let fixture_certificate = fixture.ca.as_deref();
-                let scheme = if fixture_certificate.is_some() {
-                    "https"
-                } else {
-                    "http"
-                };
-                let path = self.approval.url[8 + host.len()..].to_owned();
-                (
-                    format!("{scheme}://{host}:{}{path}", fixture.address.port()),
-                    vec![fixture.address],
-                    fixture_certificate,
-                )
-            }
-            #[cfg(not(feature = "fixtures"))]
-            {
-                let _ = fixture;
-                return Err(TransferError::permanent("fixture_transport_disabled"));
-            }
-        } else {
-            let resolver = hickory_resolver::TokioResolver::builder_tokio()
-                .map_err(|_| TransferError::permanent("resolver_unavailable"))?
-                .build()
-                .map_err(|_| TransferError::permanent("resolver_unavailable"))?;
-            let answer = tokio::time::timeout(
-                Duration::from_secs(5),
-                resolver.lookup_ip(format!("{host}.")),
-            )
-            .await
-            .ok()
-            .and_then(std::result::Result::ok)
-            .ok_or_else(|| TransferError::transient("dns_unavailable", Duration::from_secs(2)))?;
-            let addresses = answer
-                .iter()
-                .map(|ip| SocketAddr::new(ip, 443))
-                .collect::<Vec<_>>();
-            if addresses.is_empty()
-                || addresses.len() > 32
-                || addresses.iter().any(|value| !public(value.ip()))
-            {
-                return Err(TransferError::permanent("destination_denied"));
-            }
-            (self.approval.url.clone(), addresses, None)
-        };
-        let _ = rustls::crypto::ring::default_provider().install_default();
-        let mut builder = Client::builder()
-            .resolve_to_addrs(host, &addresses)
-            .no_proxy()
-            .redirect(reqwest::redirect::Policy::none())
-            .retry(reqwest::retry::never())
-            .http1_only()
-            .connect_timeout(Duration::from_secs(5))
-            .read_timeout(Duration::from_secs(30))
-            .pool_max_idle_per_host(0);
-        let ca_file =
-            fixture_certificate.unwrap_or(Path::new("/etc/ssl/certs/ca-certificates.crt"));
-        let roots = std::fs::read(ca_file)
-            .ok()
-            .and_then(|pem| Certificate::from_pem_bundle(&pem).ok())
-            .filter(|roots| !roots.is_empty())
-            .ok_or_else(|| TransferError::permanent("tls_roots_unavailable"))?;
-        builder = builder.tls_certs_only(roots);
-        let client = builder
-            .build()
-            .map_err(|_| TransferError::permanent("transport_unavailable"))?;
-        Ok((client, base))
-    }
 }
 
+pub(crate) async fn client(
+    approval: &Approval,
+    fixture: Option<&Fixture>,
+) -> std::result::Result<(Client, String), TransferError> {
+    let host = approval.host();
+    let (base, addresses, fixture_certificate) = if let Some(_fixture) = fixture {
+        #[cfg(feature = "fixtures")]
+        {
+            let fixture_certificate = _fixture.ca.as_deref();
+            let scheme = if fixture_certificate.is_some() {
+                "https"
+            } else {
+                "http"
+            };
+            let path = approval.url[8 + host.len()..].to_owned();
+            (
+                format!("{scheme}://{host}:{}{path}", _fixture.address.port()),
+                vec![_fixture.address],
+                fixture_certificate,
+            )
+        }
+        #[cfg(not(feature = "fixtures"))]
+        {
+            let _ = fixture;
+            return Err(TransferError::permanent("fixture_transport_disabled"));
+        }
+    } else {
+        let resolver = hickory_resolver::TokioResolver::builder_tokio()
+            .map_err(|_| TransferError::permanent("resolver_unavailable"))?
+            .build()
+            .map_err(|_| TransferError::permanent("resolver_unavailable"))?;
+        let answer = tokio::time::timeout(
+            Duration::from_secs(5),
+            resolver.lookup_ip(format!("{host}.")),
+        )
+        .await
+        .ok()
+        .and_then(std::result::Result::ok)
+        .ok_or_else(|| TransferError::transient("dns_unavailable", Duration::from_secs(2)))?;
+        let addresses = answer
+            .iter()
+            .map(|ip| SocketAddr::new(ip, 443))
+            .collect::<Vec<_>>();
+        if addresses.is_empty()
+            || addresses.len() > 32
+            || addresses.iter().any(|value| !public(value.ip()))
+        {
+            return Err(TransferError::permanent("destination_denied"));
+        }
+        (approval.url.clone(), addresses, None)
+    };
+    let _ = rustls::crypto::ring::default_provider().install_default();
+    let mut builder = Client::builder()
+        .resolve_to_addrs(host, &addresses)
+        .no_proxy()
+        .redirect(reqwest::redirect::Policy::none())
+        .retry(reqwest::retry::never())
+        .http1_only()
+        .connect_timeout(Duration::from_secs(5))
+        .read_timeout(Duration::from_secs(30))
+        .pool_max_idle_per_host(0);
+    let ca_file = fixture_certificate.unwrap_or(Path::new("/etc/ssl/certs/ca-certificates.crt"));
+    let roots = std::fs::read(ca_file)
+        .ok()
+        .and_then(|pem| Certificate::from_pem_bundle(&pem).ok())
+        .filter(|roots| !roots.is_empty())
+        .ok_or_else(|| TransferError::permanent("tls_roots_unavailable"))?;
+    builder = builder.tls_certs_only(roots);
+    let client = builder
+        .build()
+        .map_err(|_| TransferError::permanent("transport_unavailable"))?;
+    Ok((client, base))
+}
 #[derive(Default)]
 struct ResponseFrames {
     header: Vec<u8>,

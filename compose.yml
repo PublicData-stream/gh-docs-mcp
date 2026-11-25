@@ -31,8 +31,15 @@ services:
     user: "10001:10001"
     environment:
       <<: *db-client
+      GH_DOCS_CONTROL_ENABLED: "${GH_DOCS_CONTROL_ENABLED:-0}"
+      GH_DOCS_SERVE_NOTIFY_BIND: "${SERVE_NOTIFY_IP:?}:8784"
+      GH_DOCS_SYNC_SERVE_KEY_ID: "${GH_DOCS_SYNC_SERVE_KEY_ID:-v1}"
+      GH_DOCS_SYNC_SERVE_KEY_FILE: /run/secrets/sync-serve.key
       EXPLORATION_CURSOR_KEY_FILE: /run/secrets/cursor.key
       EXPLORATION_CURSOR_KEY_ID: "${EXPLORATION_CURSOR_KEY_ID:-v1}"
+      GH_DOCS_SYNC_SERVE_PREVIOUS_KEY_ID: "${GH_DOCS_SYNC_SERVE_PREVIOUS_KEY_ID:-}"
+      GH_DOCS_SYNC_SERVE_PREVIOUS_KEY_FILE: "${GH_DOCS_SYNC_SERVE_PREVIOUS_KEY_FILE:-}"
+      GH_DOCS_SYNC_SERVE_PREVIOUS_KEY_EXPIRES: "${GH_DOCS_SYNC_SERVE_PREVIOUS_KEY_EXPIRES:-}"
       MCP_BIND: "${SERVE_INGRESS_IP:?}:8080"
       MCP_HOST: "127.0.0.1:${PROXY_PORT:?}"
       MCP_ORIGIN: "https://127.0.0.1:${PROXY_PORT:?}"
@@ -54,6 +61,17 @@ services:
     cpus: 4
     environment:
       <<: *db-client
+      GH_DOCS_CONTROL_ENABLED: "${GH_DOCS_CONTROL_ENABLED:-0}"
+      GH_DOCS_SYNC_CONTROL_BIND: "${SYNC_CONTROL_IP:?}:8783"
+      GH_DOCS_SYNC_SERVE_ADDR: "${SERVE_NOTIFY_IP:?}:8784"
+      GH_DOCS_SYNC_ROSTER_FILE: "${GH_DOCS_SYNC_ROSTER_FILE:-}"
+      GH_DOCS_FEED_SYNC_KEY_ID: "${GH_DOCS_FEED_SYNC_KEY_ID:-v1}"
+      GH_DOCS_FEED_SYNC_KEY_FILE: /run/secrets/feed-sync.key
+      GH_DOCS_FEED_SYNC_PREVIOUS_KEY_ID: "${GH_DOCS_FEED_SYNC_PREVIOUS_KEY_ID:-}"
+      GH_DOCS_FEED_SYNC_PREVIOUS_KEY_FILE: "${GH_DOCS_FEED_SYNC_PREVIOUS_KEY_FILE:-}"
+      GH_DOCS_FEED_SYNC_PREVIOUS_KEY_EXPIRES: "${GH_DOCS_FEED_SYNC_PREVIOUS_KEY_EXPIRES:-}"
+      GH_DOCS_SYNC_SERVE_KEY_ID: "${GH_DOCS_SYNC_SERVE_KEY_ID:-v1}"
+      GH_DOCS_SYNC_SERVE_KEY_FILE: /run/secrets/sync-serve.key
       GH_DOCS_SYNC_CONCURRENCY: "${GH_DOCS_SYNC_CONCURRENCY:-2}"
       GH_DOCS_SYNC_QUOTA_BYTES: "${GH_DOCS_SYNC_QUOTA_BYTES:-8589934592}"
     dns: ["${SYNC_DNS:-127.0.0.1}"]
@@ -81,7 +99,14 @@ services:
     build: {context: ., target: feed}
     profiles: [feed]
     user: "10003:10003"
-    environment: {HEALTH_BIND: "127.0.0.1:8081"}
+    environment:
+      HEALTH_BIND: "127.0.0.1:8081"
+      GH_DOCS_CONTROL_ENABLED: "${GH_DOCS_CONTROL_ENABLED:-0}"
+      GH_DOCS_FEED_SYNC_ADDR: "${SYNC_CONTROL_IP:?}:8783"
+      GH_DOCS_FEED_ROSTER_FILE: "${GH_DOCS_FEED_ROSTER_FILE:-}"
+      GH_DOCS_FEED_SYNC_KEY_ID: "${GH_DOCS_FEED_SYNC_KEY_ID:-v1}"
+      GH_DOCS_FEED_SYNC_KEY_FILE: /run/secrets/feed-sync.key
+    dns: ["${FEED_DNS:-127.0.0.1}"]
     networks:
       feed_control: {ipv4_address: "${FEED_CONTROL_IP:?}"}
       feed_egress: {ipv4_address: "${FEED_EGRESS_IP:?}", ipv6_address: "${FEED_EGRESS_V6:?}", gw_priority: 1}

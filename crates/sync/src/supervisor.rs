@@ -13,7 +13,22 @@ use tokio::{io::AsyncReadExt, net::UnixStream, process::Command};
 pub const CHILD: &str = "--phase2-supervised";
 const LIFELINE: i32 = 3;
 
-pub async fn run(args: &[String]) -> Result<ExitStatus> {
+pub struct Worker {
+    lifeline: Option<BlockingStream>,
+    child: tokio::process::Child,
+}
+
+impl Worker {
+    pub async fn wait(&mut self) -> io::Result<ExitStatus> {
+        self.child.wait().await
+    }
+
+    pub fn cancel(&mut self) {
+        self.lifeline.take();
+    }
+}
+
+pub fn spawn(args: &[String], quiet: bool) -> Result<Worker> {
     let (lifeline, worker) = BlockingStream::pair()?;
     let fd = worker.as_raw_fd();
     let mut command = Command::new(std::env::current_exe()?);
@@ -27,15 +42,28 @@ pub async fn run(args: &[String]) -> Result<ExitStatus> {
             Ok(())
         });
     }
-    let mut child = command.spawn()?;
+    if quiet {
+        command
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null());
+    }
+    let child = command.spawn()?;
     drop(worker);
+    Ok(Worker {
+        lifeline: Some(lifeline),
+        child,
+    })
+}
+
+pub async fn run(args: &[String]) -> Result<ExitStatus> {
+    let mut child = spawn(args, false)?;
     let mut term = tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())?;
     tokio::select! {
         result = child.wait() => return Ok(result?),
         _ = tokio::signal::ctrl_c() => (),
         _ = term.recv() => (),
     }
-    drop(lifeline);
+    child.cancel();
     Ok(child.wait().await?)
 }
 

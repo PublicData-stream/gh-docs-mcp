@@ -5,7 +5,8 @@ from pathlib import Path
 from subprocess import run
 
 
-def install(name, env, fixture_root, *, sync_fixture=False, sync_https=(), sync_resolver=None):
+def install(name, env, fixture_root, *, sync_fixture=False, sync_https=(), sync_resolver=None,
+            control=False, feed_fixture=False, feed_https=(), feed_resolver=None):
     # Bridge forwarding covers packets switched within a project bridge even
     # on hosts with br_netfilter disabled. Inet covers routed and host traffic.
     edges = [
@@ -16,6 +17,11 @@ def install(name, env, fixture_root, *, sync_fixture=False, sync_https=(), sync_
         ("SYNC_EGRESS", "SINK_SYNC", 8080, ("IP", "V6")),
         ("FEED_EGRESS", "SINK_FEED", 8080, ("IP", "V6")),
     ]
+    if control:
+        edges += [
+            ("FEED_CONTROL", "SYNC_CONTROL", 8783, ("IP",)),
+            ("SYNC_NOTIFY", "SERVE_NOTIFY", 8784, ("IP",)),
+        ]
     bridges = ", ".join(f'"{value}"' for key, value in env.items() if key.endswith("_BRIDGE"))
     inet_scope = f"iifname {{ {bridges} }}"
     outgoing_scope = f"oifname {{ {bridges} }}"
@@ -30,13 +36,16 @@ def install(name, env, fixture_root, *, sync_fixture=False, sync_https=(), sync_
     if sync_fixture:
         for port in (8443, 8088):
             allows.append(f"ip saddr {env['SYNC_EGRESS_IP']} ip daddr {env['UPSTREAM_IP']} tcp dport {port} counter accept")
-    for target in map(ip_network, sync_https):
-        family, suffix = ("ip", "IP") if target.version == 4 else ("ip6", "V6")
-        allows.append(f"{family} saddr {env[f'SYNC_EGRESS_{suffix}']} {family} daddr {target} tcp dport 443 counter accept")
-    if sync_resolver:
-        target = ip_address(sync_resolver)
-        family, suffix = ("ip", "IP") if target.version == 4 else ("ip6", "V6")
-        allows.append(f"{family} saddr {env[f'SYNC_EGRESS_{suffix}']} {family} daddr {target} meta l4proto {{ udp, tcp }} th dport 53 counter accept")
+    if feed_fixture:
+        allows.append(f"ip saddr {env['FEED_EGRESS_IP']} ip daddr {env['FEED_UPSTREAM_IP']} tcp dport 8443 counter accept")
+    for role, ranges, resolver in (("SYNC", sync_https, sync_resolver), ("FEED", feed_https, feed_resolver)):
+        for target in map(ip_network, ranges):
+            family, suffix = ("ip", "IP") if target.version == 4 else ("ip6", "V6")
+            allows.append(f"{family} saddr {env[f'{role}_EGRESS_{suffix}']} {family} daddr {target} tcp dport 443 counter accept")
+        if resolver:
+            target = ip_address(resolver)
+            family, suffix = ("ip", "IP") if target.version == 4 else ("ip6", "V6")
+            allows.append(f"{family} saddr {env[f'{role}_EGRESS_{suffix}']} {family} daddr {target} meta l4proto {{ udp, tcp }} th dport 53 counter accept")
     common = ["ct state established,related accept"]
     routed = [*common, f"{inet_scope} {neighbor_discovery} accept",
               *(f"{inet_scope} {rule}" for rule in allows),

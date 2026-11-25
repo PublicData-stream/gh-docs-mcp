@@ -26,8 +26,8 @@ revocation use the separate migration role.
 A sequence conflict is safe to report as a failed operation. After losing a
 publish or rollback response, inspect the event at the attempted next sequence
 with `--status --sequence`. The event identifies the generation that actually
-committed even if the pointer has advanced again. Events stay pending until
-the authenticated delivery work in Phase 6. Fresh reads use the catalog.
+committed even if the pointer has advanced again. Phase 6 retries pending events. Fresh reads use the catalog.
+[Scheduler and delivery runbook](control.md)
 
 ## Fences and durability
 

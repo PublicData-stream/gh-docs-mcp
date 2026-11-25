@@ -30,7 +30,7 @@ pub struct Slot {
 
 impl Slot {
     pub fn acquire() -> Result<Option<Self>> {
-        let concurrency = configured("GH_DOCS_SYNC_CONCURRENCY", 2, 1, 4)?;
+        let concurrency = concurrency()? as u64;
         let quota = configured(
             "GH_DOCS_SYNC_QUOTA_BYTES",
             8 * GIB,
@@ -82,6 +82,10 @@ impl Slot {
         }
         Ok(())
     }
+}
+
+pub fn concurrency() -> Result<usize> {
+    Ok(configured("GH_DOCS_SYNC_CONCURRENCY", 2, 1, 4)? as usize)
 }
 
 fn configured(name: &str, default: u64, min: u64, max: u64) -> Result<u64> {

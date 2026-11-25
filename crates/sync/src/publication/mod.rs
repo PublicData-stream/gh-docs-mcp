@@ -32,6 +32,7 @@ use odb::{PackFile, Repository};
 pub enum Command {
     Prepare(i64),
     Publish(i64, i64),
+    PublishScheduled(i64, i64, Uuid),
     Rollback(i64, i64),
     Status(Option<i64>),
     Recover,
@@ -141,8 +142,9 @@ pub async fn run(
     };
     match command {
         Command::Prepare(id) => context.prepare(id).await,
-        Command::Publish(id, seq) => context.promote(id, seq, false).await,
-        Command::Rollback(id, seq) => context.promote(id, seq, true).await,
+        Command::Publish(id, seq) => context.promote(id, seq, false, None).await,
+        Command::PublishScheduled(id, seq, job) => context.promote(id, seq, false, Some(job)).await,
+        Command::Rollback(id, seq) => context.promote(id, seq, true, None).await,
         Command::Recover => context.recover().await,
         Command::Gc => context.gc().await,
         Command::Discard(id) => context.discard(id).await,
@@ -692,7 +694,13 @@ impl Context<'_> {
         Ok(())
     }
 
-    async fn promote(&self, id: i64, expected: i64, rollback: bool) -> Result<Value> {
+    async fn promote(
+        &self,
+        id: i64,
+        expected: i64,
+        rollback: bool,
+        scheduled: Option<Uuid>,
+    ) -> Result<Value> {
         self.idle().await?;
         let previous = self.db.query_opt(
             "SELECT generation_id, publication_sequence FROM git_catalog.active_generations WHERE repository_id = $1",
@@ -718,13 +726,18 @@ impl Context<'_> {
         }
         self.verify_for_promotion(&target).await?;
         self.fault.at("before_publish");
-        let row = self
-            .db
-            .query_one(
+        let row =
+            if let Some(job) = scheduled {
+                self.db.query_one(
+                "SELECT sequence, notification FROM git_catalog.promote_scheduled($1,$2,$3,$4)",
+                &[&job, &self.repo.id.uuid(), &id, &expected],
+            ).await?
+            } else {
+                self.db.query_one(
                 "SELECT sequence, notification FROM git_catalog.promote_generation($1,$2,$3,$4)",
                 &[&self.repo.id.uuid(), &id, &expected, &rollback],
-            )
-            .await?;
+            ).await?
+            };
         self.fault.at("after_publish");
         Ok(json!({
             "repository": self.repo.id.to_string(), "generation": id.to_string(), "outcome": "active",

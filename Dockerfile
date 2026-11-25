@@ -129,3 +129,20 @@ RUN --network=none \
 
 FROM phase3-serve AS phase4-serve
 COPY --from=phase4-fixture-build /out/gh-docs-phase4-fixture /usr/local/bin/
+
+FROM app-build AS phase6-fixture-build
+RUN --network=none \
+    --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    --mount=type=cache,target=/tmp/rust/target,sharing=locked \
+    cargo build --frozen --release -p gh-docs-mcp --features phase6-fixtures --bin gh-docs-sync --bin gh-docs-feed --bin gh-docs-serve \
+    && cp /tmp/rust/target/release/gh-docs-sync /tmp/rust/target/release/gh-docs-feed \
+          /tmp/rust/target/release/gh-docs-serve /out/
+
+FROM phase3-sync AS phase6-sync
+COPY --from=phase6-fixture-build /out/gh-docs-sync /usr/local/bin/
+
+FROM feed AS phase6-feed
+COPY --from=phase6-fixture-build /out/gh-docs-feed /usr/local/bin/
+
+FROM serve AS phase6-serve
+COPY --from=phase6-fixture-build /out/gh-docs-serve /usr/local/bin/

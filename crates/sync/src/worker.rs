@@ -365,7 +365,7 @@ pub fn launch(args: &[std::ffi::OsString]) -> Result<()> {
     Err(git.exec().into())
 }
 
-fn packet_size(header: &[u8]) -> Result<usize> {
+pub(crate) fn packet_size(header: &[u8]) -> Result<usize> {
     let length = usize::from_str_radix(std::str::from_utf8(header)?, 16)?;
     if length == 3 || length > MAX_FRAME {
         return Err("invalid Git packet length".into());

@@ -551,16 +551,24 @@ name = "gh-docs-mcp"
 version = "0.1.0"
 dependencies = [
  "axum",
+ "base64 0.22.1",
+ "getrandom 0.4.3",
  "gh-docs-core",
  "gh-docs-git",
  "gh-docs-search",
  "gh-docs-storage",
  "gh-docs-sync",
  "gh-docs-test-support",
+ "hmac",
+ "httparse",
  "rmcp",
  "schemars",
+ "serde",
  "serde_json",
+ "sha2",
  "tokio",
+ "tokio-postgres",
+ "uuid",
 ]
 
 [[package]]
