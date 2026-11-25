@@ -7,6 +7,7 @@ use gh_docs_mcp::{
 };
 use gh_docs_search::exploration::{CursorKey, Explorer};
 use gh_docs_storage::connect;
+use rmcp::transport::streamable_http_server::StreamableHttpServerConfig;
 use tokio::net::TcpListener;
 
 const ROLE: &str = "gh_docs_serve";
@@ -73,16 +74,18 @@ async fn run(mode: Option<&str>) -> Result<()> {
             }
             notify_keys = Some(keys);
         }
-        Some(Explorer::new(CursorKey::new(
+        Some(Arc::new(Explorer::new(CursorKey::new(
             required("EXPLORATION_CURSOR_KEY_ID")?,
             &key,
-        )?))
+        )?)))
     };
     let api = TcpListener::bind(required("MCP_BIND")?).await?;
     let host = required("MCP_HOST")?;
     let origin = required("MCP_ORIGIN")?;
     let health = health(health_listener().await?);
-    let server = axum::serve(api, mcp::router(host, origin, explorer));
+    let config = StreamableHttpServerConfig::default();
+    let shutdown = config.cancellation_token.clone();
+    let server = axum::serve(api, mcp::router(host, origin, explorer.clone(), config));
     let notification = async {
         let Some(keys) = notify_keys else {
             return std::future::pending().await;
@@ -95,14 +98,18 @@ async fn run(mode: Option<&str>) -> Result<()> {
         })
         .await
     };
-    tokio::select! {
-        outcome = server => outcome?,
-        outcome = notification => outcome?,
-        outcome = health => outcome?,
-        _ = driver => return Err("serve database connection closed".into()),
-        outcome = tokio::signal::ctrl_c() => outcome?,
+    let result = tokio::select! {
+        outcome = server => outcome.map_err(Into::into),
+        outcome = notification => outcome,
+        outcome = health => outcome.map_err(Into::into),
+        _ = driver => Err("serve database connection closed".into()),
+        outcome = control::shutdown() => outcome.map_err(Into::into),
+    };
+    shutdown.cancel();
+    if let Some(explorer) = explorer {
+        explorer.drain().await;
     }
-    Ok(())
+    result
 }
 
 async fn observe(

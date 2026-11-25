@@ -174,6 +174,14 @@ impl Explorer {
         Ok(result)
     }
 
+    /// Call after cancelling the request handlers. Blocking readers keep their
+    /// permits until their Git and search workers have exited.
+    pub async fn drain(&self) {
+        if let Ok(_permits) = self.global.acquire_many(GLOBAL_SLOTS as u32).await {
+            self.global.close();
+        }
+    }
+
     fn repo_permit(&self, repo: RepositoryId) -> Result<OwnedSemaphorePermit, Error> {
         let mut map = self.repositories.lock().map_err(|_| Error::Internal)?;
         map.retain(|_, slot| slot.strong_count() > 0);

@@ -316,16 +316,21 @@ impl ServerHandler for Handler {
     }
 }
 
-pub fn router(host: String, origin: String, explorer: Option<Explorer>) -> Router {
+pub fn router(
+    host: String,
+    origin: String,
+    explorer: Option<Arc<Explorer>>,
+    config: StreamableHttpServerConfig,
+) -> Router {
     let handler = match explorer {
         Some(explorer) => Handler::Exploration {
-            explorer: Arc::new(explorer),
+            explorer,
             rate: Arc::new(Mutex::new(Rate::new())),
         },
         None => Handler::Fixture,
     };
     let admission = Arc::new(Semaphore::new(16));
-    let config = StreamableHttpServerConfig::default()
+    let config = config
         .with_legacy_session_mode(false)
         .with_stateless_protocol_metadata_required(true)
         .with_json_response(true)

@@ -34,6 +34,8 @@ RUN --network=none \
     && readelf -l /out/rg > /tmp/rg-elf && ! grep -q INTERP /tmp/rg-elf \
     && /out/rg --version
 
+FROM scratch AS cargo-registry-seed
+
 FROM rust-base AS app-build
 WORKDIR /src
 COPY Cargo.lock Cargo.toml rust-toolchain.toml ./
@@ -41,7 +43,12 @@ COPY apps apps
 COPY crates crates
 COPY migrations migrations
 # Cached artifacts may be newer than the copied workspace sources.
-RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked cargo fetch --locked
+RUN --mount=type=bind,from=cargo-registry-seed,target=/registry-seed \
+    --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    if [ -d /registry-seed/index ]; then \
+        cp -r /registry-seed/index /registry-seed/cache /usr/local/cargo/registry/; \
+    fi \
+    && (cargo fetch --locked --offline || cargo fetch --locked)
 RUN --network=none \
     --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/tmp/rust/target,sharing=locked \
