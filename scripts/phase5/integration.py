@@ -33,6 +33,7 @@ from smart_fixtures import REPOS, git, repo_path
 class Wire:
     def __init__(self, stack):
         self.port = int(stack.env["PROXY_PORT"])
+        self.host = getattr(stack, "mcp_host", "127.0.0.1")
         self.ca = Path(stack.root, "ca.crt")
         self.ssl = ssl.create_default_context(cafile=self.ca)
         self.stack = stack
@@ -50,7 +51,7 @@ class Wire:
         if method == "tools/call":
             headers["Mcp-Name"] = args["name"]
         headers.update(changes or {})
-        client = http.client.HTTPSConnection("127.0.0.1", self.port, context=self.ssl, timeout=22)
+        client = http.client.HTTPSConnection(self.host, self.port, context=self.ssl, timeout=22)
         client.request("POST", "/mcp", json.dumps(packet).encode(), headers)
         return client
 
@@ -58,10 +59,11 @@ class Wire:
         with closing(self.start(method, args, request_id=request_id, **options)) as client:
             response = client.getresponse()
             body = response.read()
-            assert response.status == status, (response.status, body[:512])
+            accepted = status if isinstance(status, tuple) else (status,)
+            assert response.status in accepted, (response.status, body[:512])
             assert len(body) <= 256 * 1024
             assert response.getheader("Mcp-Session-Id") is None
-            if status != 200 or not body:
+            if response.status != 200 or not body:
                 return {}
             result = json.loads(body)
             assert result["id"] == request_id
@@ -81,7 +83,7 @@ class Wire:
             assert content["code"] == error, result
         return content
 
-    def validate_registry(self):
+    def validate_registry(self, host_rejection=403):
         assert self.send("server/discover", {})["result"]["supportedVersions"] == [VERSION]
         registry = self.send("tools/list", {})["result"]["tools"]
         self.tools = {tool["name"]: tool for tool in registry}
@@ -94,7 +96,7 @@ class Wire:
             Draft202012Validator.check_schema(tool["inputSchema"])
             Draft202012Validator.check_schema(tool["outputSchema"])
         self.send("tools/list", {}, status=403, changes={"Origin": "https://invalid.test"})
-        self.send("tools/list", {}, status=403, changes={"Host": "invalid.test"})
+        self.send("tools/list", {}, status=host_rejection, changes={"Host": "invalid.test"})
         assert "error" in self.send("tools/call", {"name": "git.fetch", "arguments": {}})
         self.call("git.log", {"arbitrary": "FLAGS"}, error="invalid_argument", validate=False)
 
@@ -328,14 +330,17 @@ def retirement(wire, upstream, endpoint, ctx, token):
     phase3.command(stack, repo, "--recover")
 
 
-def sdk(wire, node, client_dir, repo):
+def sdk(wire, node, client_dir, repo, generation=None):
     script = client_dir / "phase5-sdk.mjs"
     shutil.copyfile(ROOT / "scripts/phase5/sdk.mjs", script)
     os.chown(script, int(os.environ["SUDO_UID"]), int(os.environ["SUDO_GID"]))
     try:
         with wire.ca.open("rb") as ca:
             env = {**os.environ, "NODE_EXTRA_CA_CERTS": f"/proc/self/fd/{ca.fileno()}"}
-            result = phase2.phase0.run([node, script, f"https://127.0.0.1:{wire.port}/mcp", repo],
+            args = [node, script, f"https://{wire.host}:{wire.port}/mcp", repo]
+            if generation is not None:
+                args.append(str(generation))
+            result = phase2.phase0.run(args,
                 env=env, pass_fds=(ca.fileno(),), user=int(os.environ["SUDO_UID"]),
                 group=int(os.environ["SUDO_GID"]), extra_groups=[], timeout=25)
             print(result.stdout.strip(), flush=True)

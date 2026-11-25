@@ -1,0 +1,27 @@
+services:
+  serve:
+    image: "${GH_DOCS_SERVE_IMAGE:?Use the qualified release receipt}"
+    build: !reset null
+    environment:
+      MCP_HOST: "${GH_DOCS_MCP_AUTHORITY:?}"
+      MCP_ORIGIN: "https://${GH_DOCS_MCP_AUTHORITY:?}"
+
+  sync:
+    image: "${GH_DOCS_SYNC_IMAGE:?Use the qualified release receipt}"
+    build: !reset null
+
+  feed:
+    image: "${GH_DOCS_FEED_IMAGE:?Use the qualified release receipt}"
+    build: !reset null
+
+  migrate:
+    image: "${GH_DOCS_SYNC_IMAGE:?Use the qualified release receipt}"
+
+  proxy:
+    image: ghcr.io/oxibelt/oxibelt-dataplane-strict:0.10.0-alpine-musl@sha256:fcdbb89f35bf64b960ed3b11c3f218535d26577bee4ddc625a082e3138bb2d6d
+    user: "10001:10001"
+    entrypoint: !reset null
+    volumes: !override
+      - ${FIXTURES:?}/proxy/oxibelt.toml:/etc/oxibelt/config/oxibelt.toml:ro
+      - ${FIXTURES:?}/proxy/server.crt:/etc/oxibelt/cert/server.crt:ro
+      - ${FIXTURES:?}/proxy/server.key:/etc/oxibelt/cert/server.key:ro

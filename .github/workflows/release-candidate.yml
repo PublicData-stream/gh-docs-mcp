@@ -1,0 +1,135 @@
+name: Qualify OCI release candidate
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TARGET_DIR: /tmp/rust/target
+  TMPDIR: /tmp
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: amd64
+            runner: ubuntu-26.04
+            machine: x86_64
+          - platform: arm64
+            runner: ubuntu-26.04-arm
+            machine: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 26.13.1
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6
+        with:
+          version: 12.21.0
+          run_install: false
+      - name: Prepare the native qualification host
+        env:
+          EXPECTED_MACHINE: ${{ matrix.machine }}
+        run: |
+          test "$(uname -m)" = "$EXPECTED_MACHINE"
+          test "$(findmnt -n -o FSTYPE -T /tmp | head -1)" = ext4
+          sudo apt-get update
+          sudo apt-get install -y nftables python3-jsonschema skopeo
+          rustup toolchain install --no-self-update
+          cargo fetch --locked
+          cargo install --locked --version 0.22.2 cargo-audit
+          client=$(scripts/phase0/prepare-client.sh)
+          echo "PHASE8_CLIENT=$client" >> "$GITHUB_ENV"
+          mkdir /tmp/phase8-evidence
+          {
+            git rev-parse HEAD
+            date -u
+            uname -a
+            rustc -Vv
+            node --version
+            pnpm --version
+            docker version
+            docker compose version
+            docker buildx version
+          } > /tmp/phase8-evidence/host.log
+      - name: Check Rust and build native images
+        run: |
+          scripts/phase0/check-rust.sh 2>&1 | tee /tmp/phase8-evidence/rust.log
+          python3 -B scripts/phase8/images.py build --repeat /tmp/phase8-native \
+            2>&1 | tee /tmp/phase8-evidence/build.log
+          scripts/phase8/fixtures.sh phase8-fixtures phase8-previous \
+            2>&1 | tee /tmp/phase8-evidence/fixtures.log
+          for image in $(python3 -B scripts/phase8/pins.py); do
+            docker --context default pull "$image"
+          done
+      - name: Qualify Compose and restore
+        run: |
+          status=0
+          scripts/phase8/qualify.sh phase8-fixtures /tmp/phase8-evidence \
+            "$(command -v node)" "$PHASE8_CLIENT" || status=1
+          sudo -n python3 -B scripts/phase8/integration.py --bundle /tmp/phase8-native \
+            --fixture-tag phase8-fixtures --runtime-tag phase8-candidate --previous-tag phase8-previous \
+            --node "$(command -v node)" --client-dir "$PHASE8_CLIENT" \
+            --evidence /tmp/phase8-evidence/restore.json \
+            2>&1 | tee /tmp/phase8-evidence/restore.log || status=1
+          exit "$status"
+      - name: Audit the exact native images and dependencies
+        if: ${{ !cancelled() && hashFiles('Cargo.lock') != '' }}
+        run: |
+          test -f /tmp/phase8-native/receipt.json
+          python3 -B scripts/phase8/audit.py /tmp/phase8-native /tmp/phase8-evidence/audit \
+            --tag phase8-audit 2>&1 | tee /tmp/phase8-evidence/audit.log
+      - name: Seal the successful native receipt
+        run: |
+          jq '{platform, revision, images} + {result: "pass"}' \
+            /tmp/phase8-native/receipt.json > /tmp/phase8-native/qualification.json
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: ${{ !cancelled() }}
+        with:
+          name: phase8-evidence-${{ matrix.platform }}
+          path: /tmp/phase8-evidence
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: phase8-native-${{ matrix.platform }}
+          path: /tmp/phase8-native
+          compression-level: 0
+      - name: Remove disposable SDK fixture
+        if: ${{ always() }}
+        run: |
+          if [[ ${PHASE8_CLIENT:-} == /tmp/gh-docs-client.* ]]; then
+            rm -rf -- "$PHASE8_CLIENT"
+          fi
+
+  assemble:
+    needs: native
+    runs-on: ubuntu-26.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          pattern: phase8-native-*
+          path: /tmp/phase8-inputs
+      - name: Assemble and checksum the qualified OCI indexes
+        run: |
+          python3 -B scripts/phase8/images.py assemble /tmp/phase8-inputs/phase8-native-amd64 \
+            /tmp/phase8-inputs/phase8-native-arm64 /tmp/phase8-release
+          cd /tmp/phase8-release
+          find . -type f -print0 | sort -z | xargs -0 sha256sum > /tmp/phase8-release.sha256
+          mv /tmp/phase8-release.sha256 SHA256SUMS
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: gh-docs-mcp-oci-release
+          path: /tmp/phase8-release
+          compression-level: 0

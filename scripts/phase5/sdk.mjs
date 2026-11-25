@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client';
 
-const [url, repository] = process.argv.slice(2);
+const [url, repository, generation] = process.argv.slice(2);
 const revision = '2026-07-28';
 const client = new Client(
   { name: 'phase5-typescript-sdk', version: '1.0.0' },
@@ -18,7 +18,11 @@ try {
     assert.deepEqual(JSON.parse(result.content[0].text), result.structuredContent);
     return result.structuredContent;
   };
-  const { context } = await call('git.resolve', { repository_id: repository, selector: { kind: 'default' } });
+  const { context } = await call('git.resolve', {
+    repository_id: repository,
+    ...(generation && { generation_id: generation }),
+    selector: { kind: 'default' },
+  });
   const path = { encoding: 'utf8', value: 'data/note' };
   await call('repository.search', {});
   await call('repository.info', { repository_id: repository });

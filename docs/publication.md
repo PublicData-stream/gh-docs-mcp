@@ -95,18 +95,57 @@ multiple generations. Recovery retains ambiguous files for operator
 inspection and does not fetch replacement content. Staging used for
 canonical work is sync-owned and inaccessible to serve.
 
-## Backup contract
+## Backup and restore
 
-Quiesce approval and sync writers, finish or recover pending canonical
-operations, and capture a matching PostgreSQL dump and canonical store
-inventory under exclusive repository fences. Include pack files and
-sidecars, immutable manifests, retention refs, the outbox and policy
-records. Back up private staging and quarantine separately if required.
-Restore to fresh volumes with ingress closed. Recreate lock inodes only
-with readers and writers stopped, then verify catalog health, all protected
-closures, role grants and a pinned read before restoring ingress. Phase 8
-will rehearse the procedure. Phase 3 process interruptions do not qualify
-power-loss behavior.
+Use the rootful Compose maintenance runner on a trusted single-host
+deployment. Export the same private Compose variables used to start the
+project and pass the same project name and Compose files. Use the
+PostgreSQL Unix socket through Compose and keep its host ports private.
+
+1. Close the ingress proxy, stop feed, and drain and stop serve and sync.
+   Exclude other operators and one-shot jobs for the maintenance window.
+   Recover interrupted publication and settle uninstalled candidates by
+   preparing or discarding them. Stop the recovery containers before capture.
+   Busy fences or unsettled catalog state abort the backup.
+2. Invoke `backup.py backup` with a fresh private bundle directory. It takes
+   the migration advisory lock and existing repository fence pairs, freezes
+   catalog DML while allowing `pg_dump`, and checks the inventory and pointer
+   again before releasing fences. The bundle holds `catalog.dump`, `store/`,
+   and `manifest.json`. Save the reported manifest SHA-256 through an
+   independent trusted channel. Secure and encrypt the backup and preserve
+   numeric ownership on the independent copy. Keep secrets, private staging
+   and quarantine separately. Retain or remove any failed partial bundle
+   as incident material under the operator's policy.
+3. Provision a fresh destination with the same scoped roles, a fresh
+   PostgreSQL instance, an initialized empty canonical mount, and the
+   private ingress closed. Provision independent TLS, DB and HMAC secrets
+   and a new cursor key and key ID. Start only PostgreSQL.
+4. Verify the copied bundle using the independently held manifest digest.
+   Run `restore` with that digest. It restores into the un-migrated database
+   with object owners and grants, recreates lock files in the empty store and
+   runs fenced recovery including strict fsck, manifests, retention roots
+   and pointers. On failure, retain the closed destination for investigation
+   and retry on fresh volumes after repair.
+5. Reapply revocations made after capture, apply any compatible migration,
+   and confirm role grants and readiness. Through the private proxy check
+   active and retained read bytes and history, check ready generations stay
+   private and verify notification delivery after starting sync. Old cursors
+   expire with key rotation. Fresh cursors should continue against the same
+   approved generation. Open approved ingress only after these checks.
+
+```sh
+sudo -E python3 -B scripts/phase8/backup.py backup "$bundle" \
+  --project "$project" --compose-file compose.yml --compose-file deploy/compose.release.yml
+python3 -B scripts/phase8/backup.py verify "$bundle" --manifest-sha256 "$backup_digest"
+sudo -E python3 -B scripts/phase8/backup.py restore "$bundle" --manifest-sha256 "$backup_digest" \
+  --project "$restore_project" --compose-file compose.yml --compose-file deploy/compose.release.yml
+```
+
+Recover damaged content from independently verified bytes. Rollback may
+encounter the same damage when generations share a pack. The restore
+rehearsal measures fixture size and elapsed time. Process interruption and
+ext4 tests leave power-loss durability and production recovery objectives
+unqualified. [Phase 8 rehearsal](release-readiness.md)
 
 ## Qualification
 
