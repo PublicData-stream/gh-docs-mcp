@@ -185,10 +185,55 @@ impl RefName {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(
+    tag = "encoding",
+    content = "value",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
 pub enum BytePath {
     Utf8(String),
     Base64(String),
+}
+
+/// Encode a name whose byte grammar is validated by its caller.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(
+    tag = "encoding",
+    content = "value",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
+pub enum ByteString {
+    Utf8(String),
+    Base64(String),
+}
+
+impl ByteString {
+    pub fn encode(bytes: &[u8]) -> Self {
+        match std::str::from_utf8(bytes) {
+            Ok(text) => Self::Utf8(text.to_owned()),
+            Err(_) => Self::Base64(STANDARD.encode(bytes)),
+        }
+    }
+
+    pub fn decode(&self, max: usize) -> Result<Vec<u8>, &'static str> {
+        match self {
+            Self::Utf8(text) if text.len() <= max => Ok(text.as_bytes().to_vec()),
+            Self::Base64(text) if text.len() <= max.div_ceil(3) * 4 => {
+                let bytes = STANDARD.decode(text).map_err(|_| "invalid base64")?;
+                if bytes.len() > max
+                    || STANDARD.encode(&bytes) != *text
+                    || std::str::from_utf8(&bytes).is_ok()
+                {
+                    return Err("invalid or noncanonical byte string");
+                }
+                Ok(bytes)
+            }
+            _ => Err("byte string exceeds limit"),
+        }
+    }
 }
 
 const MAX_PATH_BYTES: usize = 4096;

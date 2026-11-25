@@ -38,7 +38,7 @@ pub async fn migrate(client: &mut Client) -> Result<()> {
         .iter()
         .map(|row| row.get(0))
         .collect();
-    if !matches!(versions.as_slice(), [2] | [2, 3] | [2, 3, 4]) {
+    if !matches!(versions.as_slice(), [2] | [2, 3] | [2, 3, 4] | [2, 3, 4, 5]) {
         return Err("unsupported Git catalog migration version".into());
     }
     if !versions.contains(&3) {
@@ -49,6 +49,11 @@ pub async fn migrate(client: &mut Client) -> Result<()> {
     if !versions.contains(&4) {
         transaction
             .batch_execute(include_str!("../../../migrations/0004_publication.sql"))
+            .await?;
+    }
+    if !versions.contains(&5) {
+        transaction
+            .batch_execute(include_str!("../../../migrations/0005_exploration.sql"))
             .await?;
     }
     transaction.commit().await?;

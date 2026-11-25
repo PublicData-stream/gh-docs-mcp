@@ -18,9 +18,23 @@ use gh_docs_git::{
 };
 use tokio_postgres::{Client, IsolationLevel, Transaction};
 
-use crate::catalog::RefSnapshot;
+use crate::{
+    catalog::RefSnapshot,
+    exploration::{self, Metadata},
+};
 
 const FENCE_WAIT: Duration = Duration::from_secs(2);
+
+#[derive(Debug)]
+pub struct GenerationUnavailable;
+
+impl std::fmt::Display for GenerationUnavailable {
+    fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        out.write_str("generation unavailable")
+    }
+}
+
+impl std::error::Error for GenerationUnavailable {}
 
 pub async fn filesystem_fence(
     repository: RepositoryId,
@@ -108,7 +122,7 @@ async fn reader_key(
             &[&repo.uuid(), &generation],
         )
         .await?
-        .ok_or("generation unavailable")?
+        .ok_or(GenerationUnavailable)?
         .get(0);
     if !tx
         .query_one("SELECT pg_try_advisory_xact_lock_shared($1)", &[&key])
@@ -125,6 +139,7 @@ pub struct Generation {
     pub sequence: i64,
     pub format: ObjectFormat,
     pub refs: Vec<RefSnapshot>,
+    pub exploration: Option<Metadata>,
 }
 
 impl Generation {
@@ -155,6 +170,29 @@ pub async fn read_generation<T: Send + 'static>(
     requested: Option<i64>,
     operation: impl FnOnce(Generation, &Reader) -> Result<T> + Send + 'static,
 ) -> Result<T> {
+    read(client, repo, requested, false, operation).await
+}
+
+pub async fn read_exploration<T: Send + 'static>(
+    client: &mut Client,
+    repo: RepositoryId,
+    requested: Option<i64>,
+    operation: impl FnOnce(Generation, &Reader) -> Result<T> + Send + 'static,
+) -> Result<T> {
+    // Preflight before touching the store. The authoritative check is fenced.
+    if exploration::get(client, repo, requested).await?.is_none() {
+        return Err(GenerationUnavailable.into());
+    }
+    read(client, repo, requested, true, operation).await
+}
+
+async fn read<T: Send + 'static>(
+    client: &mut Client,
+    repo: RepositoryId,
+    requested: Option<i64>,
+    require_exploration: bool,
+    operation: impl FnOnce(Generation, &Reader) -> Result<T> + Send + 'static,
+) -> Result<T> {
     let repository = filesystem_fence(repo, LockScope::Repository, LockMode::Shared).await?;
     let tx = client
         .build_transaction()
@@ -168,19 +206,28 @@ pub async fn read_generation<T: Send + 'static>(
     let id: i64 = tx
         .query_opt(select, &[&repo.uuid(), &requested])
         .await?
-        .ok_or("generation unavailable")?
+        .ok_or(GenerationUnavailable)?
         .get(0);
     let generation = filesystem_fence(repo, LockScope::Generation(id), LockMode::Shared).await?;
     reader_key(&tx, repo, Some(id)).await?;
     let row = tx
         .query_opt(select, &[&repo.uuid(), &requested])
         .await?
-        .ok_or("generation unavailable")?;
+        .ok_or(GenerationUnavailable)?;
     if row.get::<_, i64>(0) != id {
         return Err("generation changed while acquiring reader fences".into());
     }
     let format: ObjectFormat = row.get::<_, &str>(2).parse()?;
     let sequence = row.get(1);
+    let exploration = if require_exploration {
+        Some(
+            exploration::get(&tx, repo, Some(id))
+                .await?
+                .ok_or(GenerationUnavailable)?,
+        )
+    } else {
+        None
+    };
     let refs = tx
         .query(
             "SELECT ref_name, target_oid, target_type, peeled_commit FROM git_catalog.readable_refs
@@ -215,6 +262,7 @@ pub async fn read_generation<T: Send + 'static>(
                 format,
                 sequence,
                 refs,
+                exploration,
             },
             &reader,
         )

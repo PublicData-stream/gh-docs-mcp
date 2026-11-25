@@ -4,6 +4,7 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{DateTime, Utc};
 use gh_docs_core::{
     Result,
+    exploration::ExplorationApproval,
     git::{ObjectFormat, RefName, RepositoryId},
 };
 use serde::{Deserialize, Serialize};
@@ -43,6 +44,8 @@ pub struct Approval {
     pub license_evidence: String,
     pub notice_evidence: String,
     pub limits: Limits,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub exploration: Option<ExplorationApproval>,
 }
 
 #[derive(Clone, Deserialize, Serialize, PartialEq, Eq, PartialOrd, Ord)]
@@ -113,6 +116,9 @@ impl Approval {
     }
 
     pub fn validate(&self) -> Result<(RepositoryId, Uuid, ObjectFormat)> {
+        if let Some(exploration) = &self.exploration {
+            exploration.validate()?;
+        }
         let repo = self.repository.parse()?;
         let source: RepositoryId = self.source.parse()?;
         let format = self.format.parse()?;
