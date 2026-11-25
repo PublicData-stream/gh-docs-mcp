@@ -44,6 +44,9 @@ client_ip_source = "direct_peer"
 [proxy.real_ip]
 enabled = false
 
+[proxy.auto_upgrade]
+enabled = false
+
 [proxy.retry]
 enabled = false
 
@@ -64,6 +67,8 @@ bind = "127.0.0.1:9091"
 [[upstreams]]
 name = "serve"
 origin = "http://{serve}:8080"
+max_http_version = "h1"
+preserve_host = true
 
 [[routes]]
 name = "mcp"

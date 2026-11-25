@@ -66,8 +66,8 @@ def release_stack(tag, refs):
         phase0.firewall.install(table, stack.env, root, control=True)
         installed = True
         stack.one_shot("volume-admin")
-        stack.compose("up", "--no-build", "--pull", "never", "--wait", "--wait-timeout", "65",
-                      "postgres", timeout=75)
+        stack.compose("up", "--no-build", "--pull", "never", "--wait", "--wait-timeout", "130",
+                      "postgres", timeout=145)
         yield stack, project, table
     except BaseException:
         print(stack.compose("logs", "--no-color", "--tail", "12", "proxy", "serve", "sync",
@@ -96,8 +96,13 @@ def open_stack(stack):
         except OSError:
             return False
     phase3.wait_until(tls, "OxiBelt TLS did not start", seconds=25)
-    stack.exec("proxy", "wget", "-qO", "/dev/null", "http://127.0.0.1:9091/ready")
-    metrics = stack.exec("proxy", "wget", "-qO-", "http://127.0.0.1:9090/metrics").stdout
+    pid = int(phase0.run([*phase0.DOCKER, "inspect", "--format", "{{.State.Pid}}",
+                          stack.ids["proxy"]]).stdout)
+    assert pid > 0
+    operator_probe = ["nsenter", "--target", str(pid), "--net", "curl", "--noproxy", "*",
+                      "--fail", "--silent", "--show-error", "--max-time", "5"]
+    phase0.run([*operator_probe, "http://127.0.0.1:9091/ready"])
+    metrics = phase0.run([*operator_probe, "http://127.0.0.1:9090/metrics"]).stdout
     assert "oxibelt_" in metrics
 
 

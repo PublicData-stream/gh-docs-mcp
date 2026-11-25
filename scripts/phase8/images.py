@@ -74,13 +74,20 @@ def inspect(layout, arch):
     attestations = set()
     for item in entries:
         image = json.loads(read_blob(layout, item))
-        read_blob(layout, image["config"])
+        config = json.loads(read_blob(layout, image["config"]))
+        annotations = item.get("annotations", {})
+        if item is runtime:
+            if config.get("architecture") != arch or config.get("os") != "linux":
+                raise ValueError("runtime config differs from its platform descriptor")
+        elif (annotations.get("vnd.docker.reference.type") != "attestation-manifest"
+              or annotations.get("vnd.docker.reference.digest") != runtime_digest):
+            raise ValueError("unexpected descriptor in native image bundle")
         for layer in image["layers"]:
             path = blob_path(layout, layer["digest"])
             if path.stat().st_size != layer["size"] or sha256(path) != layer["digest"][7:]:
                 raise ValueError("OCI layer does not match descriptor")
             kind = layer.get("annotations", {}).get("in-toto.io/predicate-type")
-            if item.get("annotations", {}).get("vnd.docker.reference.digest") == runtime_digest and kind:
+            if item is not runtime and kind:
                 statement = json.loads(path.read_bytes())
                 if not any(subject.get("digest", {}).get("sha256") == runtime_digest[7:]
                            for subject in statement["subject"]):
@@ -158,8 +165,9 @@ def build(destination, revision, seed, repeat):
                 for role in ROLES:
                     second = work / f"repeat-{role}"
                     export(name, source, work, second, role, arch, epoch, inputs, seed)
-                    if inspect(second, arch)["digest"] != result[role]:
-                        raise ValueError(f"{role} did not reproduce its runtime manifest")
+                    actual = inspect(second, arch)["digest"]
+                    if actual != result[role]:
+                        raise ValueError(f"{role} did not reproduce its runtime manifest: {result[role]} != {actual}")
     write_json(destination / "receipt.json", {**inputs, "platform": arch, "images": result,
                                                "source_date_epoch": int(epoch), "repeated": repeat})
 
@@ -188,13 +196,13 @@ def export(builder_name, source, work, destination, role, arch, epoch, labels, s
 def assemble(amd64, arm64, destination):
     inputs = (amd64, arm64)
     receipts = [json.loads((directory / "receipt.json").read_text()) for directory in inputs]
-    for receipt, arch in zip(receipts, ARCHES, strict=True):
+    for directory, receipt, arch in zip(inputs, receipts, ARCHES, strict=True):
         if (receipt["platform"] != arch or not receipt["repeated"]
                 or receipt["revision"] != receipts[0]["revision"]
                 or receipt["version"] != receipts[0]["version"]
                 or receipt["source_date_epoch"] != receipts[0]["source_date_epoch"]):
             raise ValueError("release input receipts do not describe the same reproducible release")
-        gate = json.loads((inputs[ARCHES.index(arch)] / "qualification.json").read_text())
+        gate = json.loads((directory / "qualification.json").read_text())
         if gate != {"platform": arch, "revision": receipt["revision"], "images": receipt["images"],
                     "result": "pass"}:
             raise ValueError("required native qualification receipt is missing")
@@ -237,6 +245,12 @@ def load_native(bundle, tag):
     arch = architecture()
     refs = {}
     aliases = []
+    for role in ROLES:
+        alias = f"gh-docs-mcp-{role}:{tag}"
+        existing = subprocess.run([*DOCKER, "image", "inspect", alias],
+                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
+        if existing.returncode == 0:
+            raise ValueError(f"qualification image tag already exists: {alias}")
     with local_registry() as registry, tempfile.TemporaryDirectory(dir="/tmp", prefix="ghdocs8-oci-") as directory:
         try:
             for role in ROLES:

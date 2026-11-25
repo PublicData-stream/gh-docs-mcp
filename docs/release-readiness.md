@@ -9,8 +9,9 @@ alone does not qualify a deployment.
 ## Reproduce the local gate
 
 Use the [prerequisites](deployment-prerequisites.md) and install
-`python3-jsonschema`, `skopeo`, and `cargo-audit` 0.22.2. Use native
-architecture and retain logs in a fresh directory under `/tmp`.
+`python3-jsonschema`, `skopeo`, and `cargo-audit` 0.22.2. Use `gh` with read
+access to the public OxiBelt attestations to verify the native proxy inventory.
+Run on the native architecture and retain logs in a fresh directory under `/tmp`.
 
 ```sh
 set -o pipefail
@@ -40,6 +41,7 @@ run `scripts/phase7/minikube.py` with the prepared serve, Phase 6 sync/feed,
 Phase 2 upstream, and PostgreSQL images. The harness gives its rootless
 cluster a private kubeconfig and home under `/tmp` and deletes the profile
 on exit. Follow the [Phase 7 command](phase7-qualification.md#local-procedure).
+Use `--image-load-timeout 420` when the local image import needs a longer bound.
 Remove only the temporary image tags and SDK fixture created for the run.
 Keep the sanitized evidence.
 

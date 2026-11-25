@@ -287,7 +287,7 @@ def smoke(args, serve=None, *, explore=False, wire=False, control=None, extra_lo
         execute([*minikube, "start", "--driver=docker", "--container-runtime=containerd", "--nodes=1",
                  "--cpus=4", "--memory=6144", "--listen-address=127.0.0.1", "--install-addons=false",
                  "--wait-timeout=180s", "--kubernetes-version=v1.37.0"], timeout=480)
-        execute([*minikube, "image", "load", bundle], timeout=180)
+        execute([*minikube, "image", "load", bundle], timeout=getattr(args, "image_load_timeout", 180))
         execute([*kubectl, "version", "-o", "json"])
         execute([*kubectl, "create", "-f", manifest])
         scope = [*kubectl, "-n", NAMESPACE]

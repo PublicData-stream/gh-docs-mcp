@@ -41,7 +41,10 @@ def main():
     for role in ("serve", "sync", "feed", "upstream", "postgres"):
         parser.add_argument(f"--{role}-image", required=True)
     parser.add_argument("--bootstrap-cache", type=Path)
+    parser.add_argument("--image-load-timeout", type=int, default=180, help="seconds to import the local image bundle")
     args = parser.parse_args()
+    if not 1 <= args.image_load_timeout <= 600:
+        parser.error("--image-load-timeout must be between 1 and 600")
     phase6.smoke(args, serve=args.serve_image, control=resources, extra_logs=("confinement",), phase=7)
 
 

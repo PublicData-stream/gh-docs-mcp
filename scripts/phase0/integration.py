@@ -84,7 +84,7 @@ class Stack:
     def start(self):
         self.one_shot("volume-admin")
         self.compose("up", "--no-build", "--no-recreate", "--pull", "never",
-                     "--wait", "--wait-timeout", "65", "postgres", timeout=75)
+                     "--wait", "--wait-timeout", "130", "postgres", timeout=145)
         self.one_shot("migrate")
         self.one_shot("migrate")
         self.compose("start", "serve", "sync", "feed", "proxy", "sink")

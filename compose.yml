@@ -141,6 +141,7 @@ services:
     healthcheck:
       # The temporary initdb server has TCP disabled.
       test: [CMD, pg_isready, -h, "${PG_READ_IP:?}", -d, gh_docs, -U, postgres]
+      start_period: 90s
       interval: 2s
       timeout: 2s
       retries: 20

@@ -6,6 +6,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 env:
   CARGO_TARGET_DIR: /tmp/rust/target
   TMPDIR: /tmp
@@ -84,6 +88,8 @@ jobs:
           exit "$status"
       - name: Audit the exact native images and dependencies
         if: ${{ !cancelled() && hashFiles('Cargo.lock') != '' }}
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           test -f /tmp/phase8-native/receipt.json
           python3 -B scripts/phase8/audit.py /tmp/phase8-native /tmp/phase8-evidence/audit \

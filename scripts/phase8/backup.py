@@ -281,7 +281,7 @@ def restore(project, store, bundle, expected):
         project.assert_offline()
     for repository in record["catalog"]["repositories"]:
         identity = str(UUID(repository["repository_id"]))
-        project.run("run", "--rm", "--no-deps", "-T", "sync", "--recover",
+        project.run("run", "--rm", "--no-deps", "--pull", "never", "-T", "sync", "--recover",
                     "--repository", identity, stdout=sys.stderr)
     return {"manifest_sha256": expected, "verify_seconds": checked - start,
             "seconds": time.monotonic() - start}

@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 
 from backup import sha256
-from images import DOCKER, ROOT, load_native, run, write_json
+from images import DOCKER, ROOT, architecture, load_native, run, write_json
 from pins import infrastructure
 
 
@@ -18,6 +18,39 @@ TRIVY = "ghcr.io/aquasecurity/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7
 RIPGREP_REVISION = "669cb4c755db20b26c3af3d923c042ae224c7496"
 RIPGREP = f"https://codeload.github.com/BurntSushi/ripgrep/tar.gz/{RIPGREP_REVISION}"
 GIT = "https://www.kernel.org/pub/software/scm/git/git-2.54.1.tar.xz"
+OXIBELT_REVISION = "e879ac7e263b0af9a86280cd8799de44cbffc05c"
+
+
+def proxy_sbom(ref, out):
+    index = json.loads(subprocess.check_output(
+        [*DOCKER, "buildx", "imagetools", "inspect", "--raw", ref], timeout=90))
+    child, = (item for item in index["manifests"]
+              if item["platform"].get("os") == "linux"
+              and item["platform"].get("architecture") == architecture())
+    repository, tag = ref.split("@", 1)[0].rsplit(":", 1)
+    version = tag.removesuffix("-alpine-musl")
+    native = f"{repository}@{child['digest']}"
+    for subject, predicate, filename in (
+        (ref, "https://slsa.dev/provenance/v1", "proxy-index-provenance.json"),
+        (native, "https://cyclonedx.org/bom", "proxy-native-sbom-attestation.json"),
+    ):
+        receipt = out / filename
+        with receipt.open("w") as stream:
+            run("gh", "attestation", "verify", f"oci://{subject}", "--repo", "OxiBelt/OxiBelt",
+                "--source-digest", OXIBELT_REVISION, "--source-ref", f"refs/tags/{version}",
+                "--deny-self-hosted-runners", "--predicate-type", predicate, "--format", "json",
+                stdout=stream, timeout=120)
+        results = json.loads(receipt.read_text())
+        verified = [item["verificationResult"] for item in results]
+        workflow = "https://github.com/OxiBelt/OxiBelt/.github/workflows/"
+        accepted = {f"{workflow}{name}@refs/tags/{version}"
+                    for name in ("release.yml", "release-image-arch.yml")}
+        statement = next(item["statement"] for item in verified
+                         if item["signature"]["certificate"]["subjectAlternativeName"] in accepted)
+    bom = statement["predicate"]
+    if bom.get("bomFormat") != "CycloneDX" or not bom.get("components"):
+        raise ValueError("proxy upstream SBOM is empty or unsupported")
+    write_json(out / "proxy-upstream-sbom.json", bom)
 
 
 def download(url, expected, path):
@@ -28,7 +61,13 @@ def download(url, expected, path):
 
 def supply_chain(out, ripgrep_lock, advisory_db):
     blockers = []
-    for name, lock in (("workspace", ROOT / "Cargo.lock"), ("ripgrep", ripgrep_lock)):
+    proxy_lock = out / "oxibelt-Cargo.lock"
+    with proxy_lock.open("w") as record:
+        run("gh", "api", "-H", "Accept: application/vnd.github.raw+json",
+            f"repos/OxiBelt/OxiBelt/contents/Cargo.lock?ref={OXIBELT_REVISION}",
+            stdout=record, timeout=60)
+    for name, lock in (("workspace", ROOT / "Cargo.lock"), ("ripgrep", ripgrep_lock),
+                       ("oxibelt", proxy_lock)):
         args = ["cargo", "audit", "--file", lock, "--json", "--db", advisory_db, "--no-fetch"]
         with (out / f"{name}-rustsec.json").open("w") as receipt:
             subprocess.run(args, stdout=receipt, check=False)
@@ -73,8 +112,19 @@ def exact_images(bundle, out, tag, work):
                     "--format", format_name, "--output", f"/audit/{role}-{file}.json", *options)
             saved.unlink()
             report = json.loads((out / f"{role}-vulnerabilities.json").read_text())
-            for result in report.get("Results", []):
-                for finding in result.get("Vulnerabilities", []):
+            if role == "proxy":
+                # The strict image omits its package database. Use its attested native inventory.
+                try:
+                    proxy_sbom(ref, out)
+                    run(*scanner, "sbom", "--skip-db-update", "--format", "json",
+                        "--output", "/audit/proxy-upstream-vulnerabilities.json", "/audit/proxy-upstream-sbom.json")
+                    upstream = json.loads((out / "proxy-upstream-vulnerabilities.json").read_text())
+                    report["Results"] = (report.get("Results") or []) + (upstream.get("Results") or [])
+                except (OSError, ValueError, KeyError, StopIteration, subprocess.SubprocessError) as error:
+                    print(f"proxy inventory verification failed: {error}", flush=True)
+                    blockers.append("proxy: signed native SBOM audit unavailable")
+            for result in report.get("Results") or []:
+                for finding in result.get("Vulnerabilities") or []:
                     if finding.get("Severity") in ("HIGH", "CRITICAL"):
                         blockers.append(f"{role}: {finding['VulnerabilityID']} {finding['PkgName']}")
     return blockers

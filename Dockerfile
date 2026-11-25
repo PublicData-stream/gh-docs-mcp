@@ -67,6 +67,9 @@ RUN --network=none \
 
 FROM docker.io/library/alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS runtime
 COPY LICENSE docs/RFC-MCP-DOCKER-LICENSE /usr/share/licenses/gh-docs-mcp/
+RUN --network=none grep -A 1 -x 'P:ca-certificates-bundle' /lib/apk/db/installed \
+    | grep -qx 'V:20261020-r0' \
+    && test -s /etc/ssl/certs/ca-certificates.crt
 
 FROM runtime AS serve
 COPY --from=app-build /out/gh-docs-serve /out/gh-docs-git-reader /out/gh-docs-search-worker /usr/local/bin/
@@ -78,7 +81,6 @@ USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/gh-docs-serve"]
 
 FROM runtime AS sync
-RUN apk add --no-cache ca-certificates-bundle=20261020-r0
 COPY --from=app-build /out/gh-docs-sync /out/gh-docs-git-sync /usr/local/bin/
 COPY --from=app-build /out/gh-docs-git-sync /usr/local/libexec/gh-docs-git/git-remote-ghdocs
 COPY --from=git-build /out/git /usr/local/bin/
@@ -87,7 +89,6 @@ USER 10002:10002
 ENTRYPOINT ["/usr/local/bin/gh-docs-sync"]
 
 FROM runtime AS feed
-RUN apk add --no-cache ca-certificates-bundle=20261020-r0
 COPY --from=app-build /out/gh-docs-feed /usr/local/bin/
 USER 10003:10003
 ENTRYPOINT ["/usr/local/bin/gh-docs-feed"]
