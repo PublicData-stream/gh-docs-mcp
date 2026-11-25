@@ -6,8 +6,10 @@ The deployed entry point is the private TLS proxy. Anyone who can reach it
 can issue untrusted MCP requests. The app checks the declared protocol,
 authority and origin, limits body size and concurrent calls, and parses
 requests into typed selectors. Source text, paths, author metadata and
-notices remain untrusted content in tool results. Redistributing source
-bytes or derived output requires the corresponding reviewed approval.
+notices remain untrusted content in tool results. Repository text can
+contain instructions to an MCP client or model and carries no such
+authority. Redistributing source bytes or derived output requires the
+corresponding reviewed approval.
 Every read checks current policy. Revocation also applies to retained
 generations and cursor resumes.
 
@@ -16,8 +18,13 @@ objects, graphs, and compressed packs. Only sync can contact an approved
 upstream. Explicit HTTPS identity, DNS and destination controls, the
 transport broker, staged verification, and size and time limits bound that
 authority. The Git process receives service-owned config and fixed
-arguments. An object present on the filesystem becomes readable only through
-an approved ref in a visible generation. A ready or quarantined candidate
+arguments. Exact approved refs are fetched in bounded batches so Git's
+ref-discovery packets stay within the broker limit. The complete observed
+snapshot and private object closure are verified before any candidate can
+be published. A policy with enough very long ref names may exhaust the
+48-request transfer budget and fail closed. An object present on the
+filesystem becomes readable only through an approved ref in a visible
+generation. A ready or quarantined candidate
 has no public authority.
 
 A compromised feed can send authenticated hints within its identity and

@@ -517,3 +517,262 @@ The retry started at 05:59:27 UTC. Cleanup removed the disposable
 Compose resources and firewall scopes, the Minikube profiles, the
 generated SDK fixture and bootstrap files, and 36 local test image tags.
 The transcripts and image IDs remain at the receipt path.
+
+## Phase 7 qualification
+
+The local qualification targets Linux amd64, kernel `7.0.0-44-generic`,
+ext4-backed `/tmp`, rootful Docker `29.10.1`, and Compose `5.8.0`.
+An earlier runtime archive was signed revision `6bee22d` and
+its 1,024-ref positive probe failed. The final archive is signed revision
+`c809e42`. The probes are based on signed revision `6d9e4c0`.
+The inputs use Rust `1.100.0`, host Git `2.53.0`, image Git `2.54.1`,
+ripgrep `16.0.0` with PCRE2 disabled, Rust MCP SDK `3.11.0`,
+TypeScript MCP client `2.4.0`, Node `26.13.1`, and pnpm `12.21.0`.
+Runtime qualification uses synthetic data and local endpoints.
+
+### Findings and initial verification
+
+- The serve process originally handled SIGINT but lacked coordinated
+  SIGTERM shutdown. On revision `70ce268`, stopping the normal serve
+  image with a live stopped search worker exited successfully in
+  376 ms, released the filesystem fence, preserved its inode, and
+  accepted a fresh MCP read after restart. An earlier probe attempted
+  the read before the restarted server was ready. The qualifier now
+  waits for health before checking the MCP endpoint.
+- Git's routine per-ref fetch summaries exceeded the 64 KiB diagnostic
+  cap at 1,024 refs. A disposable native Git comparison produced
+  69,586 stderr bytes with ordinary fetch and zero with quiet fetch.
+  Both runs wrote the same ref count. Revision `6bee22d` suppresses the
+  routine output and keeps the diagnostic and source admission limits.
+- The first rebuilt 1,024-ref run still failed. Native protocol tracing
+  showed that Git generated six discovery prefixes per exact refspec,
+  producing about 341,000 request bytes at that count. The confined
+  broker permits at most 256 KiB per request and closed the connection.
+  Revision `c809e42` now fetches bounded groups of exact approved refs
+  into the private candidate. It checks the complete before-and-after
+  ref snapshots and object closure before the candidate becomes usable.
+  The broker cap and source approval limits remain in place.
+- Buildx could not refresh the registry during the first rebuild. The
+  later build used a read-only sparse index and crate archive seed
+  populated from the locked host cache. The Dockerfile still runs the
+  workspace compile frozen with networking disabled. The optional
+  seed was also checked with an empty named context.
+- The Phase 2 saturation probe initially lost a sync slot before its
+  global admission assertion. The revised probe puts both repositories
+  on the delayed fetch path with fresh objects and checks the global
+  bound before the timed repository fence check.
+
+### Exact-image adversarial gate
+
+The Phase 7 Compose run on `c809e42` passed. Its normal serve, sync and
+feed image IDs, and all fixture-target IDs, are preserved in the
+`qualified-image-ids.txt` receipt. The suite used normal role mounts,
+scoped credentials, local synthetic HTTPS, the pinned proxy and database,
+and effective Landlock ABI 8 and seccomp confinement.
+
+| Boundary | Observed result |
+| --- | --- |
+| Reader and search workers | Unrelated repositories, secrets, sockets, writes, inherited descriptors, and failed sandbox setup were denied. SHA-1 and SHA-256 reads matched the Git fixture oracle. |
+| MCP request lifetime | A disconnected search request reaped its worker in 68 ms. A stopped worker was drained on service shutdown, its filesystem fence was released without inode replacement, and a subsequent request succeeded. `docker stop --timeout 8` took 8.555 s wall time on this run, so shutdown latency is variable. |
+| Candidate isolation | Truncated indexes in both object formats, malformed tree and transport responses, partial transfer, and quota denial left the active publication usable. A corrected retry verified. |
+| Search and traversal limits | A 130 MiB binary search advanced through a 120 MiB first page and completed on resume. Deep traversal returned `budget_exceeded`; the next approved read succeeded. |
+| Transfer limits | A 7,371,760-byte pack passed the fixture's 8 MiB cap; a larger one failed. Exactly 1,024 approved refs verified; 1,025 failed `ref_policy`, preserving the published pointer. |
+
+The probe did not exercise physical power loss, actual filesystem
+exhaustion, an input approaching the 2 GiB global inflated-object cap,
+or the maximum object and ref-name widths together. These remain outside
+the qualified envelope.
+
+The offline Rust gate passed after the runtime changes. The final
+`qualified-compose-results` receipt records exit zero for every Phase 0
+through 7 Compose probe on tag `p7-axd2tzaw-qualified`. Phase 0 and 1
+covered the pinned MCP client, role mounts, database grants, TLS, and
+both native object formats. Phases 2 through 6 covered acquisition and
+recovery, publication and retention, visibility and revocation, search
+and history, and the feed control path.
+
+A separate Minikube `v1.39.0` and Kubernetes `v1.37.0` smoke ran the
+same images in a rootless Docker profile with a Restricted namespace.
+It passed feed-to-MCP publication, the authenticated acknowledgment,
+search and history, Landlock ABI 8 and seccomp denials, and forced worker
+setup failure. The disposable cluster and its home under `/tmp` were
+deleted. Two focused repeats of the serve shutdown probe took 0.375 s
+and 0.395 s and passed the fence and subsequent-read checks. The longer
+8.555 s full-suite stop remains a measured outlier.
+
+### Dependency and source review
+
+The local source review followed the deployed request, sync acquisition,
+worker, SQL visibility, and HMAC paths. The scope and assumptions are
+recorded in the [Phase 7 threat model](phase7-qualification.md#threat-model).
+The sync Git child clears inherited environment, fixes its executable
+path and protocol allowlist, disables replacement objects and lazy fetch,
+and asks the broker only for observed approved OIDs. Private and canonical
+bare stores require service-owned config and reject unexpected entries,
+including alternates; descriptor-relative opens reject symlinks. The
+runtime probes above and the earlier gates exercised the corresponding
+network, path, visibility, and worker denials.
+The Codex Security workbench rejected the managed scan artifact path
+because its parent ancestry is group-writable without the sticky bit.
+The managed scan stopped at the threat model checkpoint. The source
+review proceeded locally.
+
+RustSec reported no matching vulnerability in the workspace or pinned
+ripgrep lockfile. It marked `chrono 0.4.45` unmaintained. The pin review
+also used upstream Git, ripgrep, Rust, and MCP SDK sources. Recursive
+cloning is outside the configured Git acquisition path, and the
+runtime uses the Rust SDK's pinned stateless server transport with
+legacy sessions disabled. [RustSec RUSTSEC-2026-0543](https://rustsec.org/advisories/RUSTSEC-2026-0543.html) ·
+[Git advisories](https://github.com/git/git/security) ·
+[ripgrep advisories](https://github.com/BurntSushi/ripgrep/security/advisories) ·
+[Rust release notes](https://doc.rust-lang.org/releases.html) ·
+[Rust SDK advisories](https://github.com/modelcontextprotocol/rust-sdk/security/advisories) ·
+[TypeScript SDK advisories](https://github.com/modelcontextprotocol/typescript-sdk/security/advisories)
+
+Trivy reported critical package matches in the pinned proxy and PostgreSQL
+images. The proxy contains the affected Brotli decoder. The tested Nginx
+binary has no Brotli linkage, and the fixture configuration loads no
+dynamic modules. The PostgreSQL match is in the bundled Go runtime of
+`gosu`. The service starts as UID 70, which skips the root-only `gosu`
+branch, and the Go advisory concerns TLS session resumption. PostgreSQL
+also links the flagged libxml2 version, while app queries use fixed SQL
+and have no XML input path. The exact image reports also contain findings
+at lower severities. Treat the pinned infrastructure image findings as
+release disposition items. [Brotli 1.2.1 release](https://github.com/google/brotli/releases/tag/v1.2.1) ·
+[Go GO-2026-4337](https://pkg.go.dev/vuln/GO-2026-4337)
+
+The final exact-image audit used Trivy `0.76.2` with a vulnerability
+database updated at `2026-11-25T07:11:44Z` and downloaded at
+`08:14:13Z`. It saved separate CycloneDX SBOMs and vulnerability JSON
+for all six runtime images. RustSec used database revision
+`10db6998b5d74ec438bcf0763125bd425a068a8f` and returned zero
+matched vulnerabilities for the workspace and the Dockerfile-pinned
+ripgrep lockfile, with the `chrono` warning above.
+
+| Image | Critical | High | Medium | Low | Unknown |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Serve | 0 | 0 | 7 | 4 | 0 |
+| Sync | 0 | 0 | 7 | 4 | 0 |
+| Feed | 0 | 0 | 7 | 4 | 0 |
+| PostgreSQL | 1 | 26 | 31 | 3 | 1 |
+| Proxy | 1 | 57 | 91 | 100 | 2 |
+| Initializer | 0 | 0 | 7 | 4 | 0 |
+
+The critical proxy match is `CVE-2026-111497` in `brotli-libs`
+version `1.2.0-r0`, with `1.2.1-r0` listed as fixed. The critical
+PostgreSQL image match is `CVE-2025-68121` in the `gosu` Go standard library
+`v1.24.6`. Static linkage and entrypoint checks narrow the tested
+reachability as described above; they do not resolve the image findings.
+Operator disposition or updated pinned infrastructure images are required
+before production release. The managed Codex Security scan also remains
+uncompleted because the workbench rejected its artifact directory.
+
+### Measured capacity
+
+The final exact-image run completed four deterministic profiles and retained
+8,719 JSONL records: 8,540 request samples, 100 cell summaries, 40
+reader comparisons, 33 publication stages, four inventories, and two
+sync-concurrency results. The table describes the visible initial
+generation. Compressed bytes are the canonical pack; allocated bytes
+include filesystem allocation in its canonical store.
+
+| Profile | Commits / tip files | Blobs / trees | Pack bytes | Inflated bytes | Allocated bytes / pack |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| SHA-1 small | 32 / 32 | 48 / 65 | 80,914 | 169,151 | 1.57× |
+| SHA-1 medium | 512 / 256 | 640 / 1,025 | 754,612 | 1,756,335 | 1.14× |
+| SHA-1 large | 4,096 / 2,048 | 5,120 / 8,193 | 6,071,278 | 14,100,527 | 1.09× |
+| SHA-256 medium | 512 / 256 | 640 / 1,025 | 797,380 | 1,802,379 | 1.16× |
+
+These are client-observed TLS request latencies in milliseconds, at one
+concurrent request, page limit 10, after three warm-up calls. Each cell
+has 100 comparable samples except SHA-256 history, which offered 54
+within the 20-second cell window. Entries are p50 / p95 / p99. A dash
+means the required 100 comparable samples were unavailable.
+
+| Profile | `git.read` | `git.rg` | `git.log` |
+| --- | ---: | ---: | ---: |
+| SHA-1 small | 38.4 / 41.0 / 43.8 | 42.1 / 44.0 / 48.1 | 33.2 / 35.0 / 37.0 |
+| SHA-1 medium | 38.2 / 40.1 / 43.0 | 41.8 / 43.4 / 47.4 | 33.2 / 35.0 / 38.5 |
+| SHA-1 large | 37.3 / 40.5 / 46.5 | 40.4 / 42.1 / 44.5 | 33.1 / 35.2 / 45.4 |
+| SHA-256 medium | 36.9 / 39.2 / 40.6 | 40.3 / 42.6 / 45.6 | 375.8 / 384.6 / — |
+
+The four profiles produced 1,675 complete results, 5,537 partial results,
+1,328 structured `budget_exceeded` rejections, and no failed calls. The
+partial search and history pages carried continuation. At one concurrent
+request, reads admitted 26.0–27.0 calls per second; search admitted
+23.7–24.6. At eight calls offered at about 47 per second to one repository,
+the main read and search cells admitted about 27–30 per second and rejected
+36–43 of each 100 calls. SHA-256 history admitted 2.7 per second at one
+concurrent call, with 54 partial pages and no p99; its eight-call cell
+admitted 12 of 100 and rejected 88. Subsequent cells completed, confirming
+admission recovered after overload.
+
+Twenty `git.read` pack-eviction samples per profile verified zero resident
+pack and index pages before each call. Their p95 ranged from 39.0 to
+42.3 ms; this only controls those files' page residency. The large
+profile's cold cell recorded 131,317,760 cgroup read bytes across 20
+requests, compared with zero cgroup read bytes during its 100 warm reads.
+Five eight-object comparisons per profile gave median direct-reader time
+of 77.2–77.6 ms and batched-reader time of 67.9–68.9 ms. The cgroup used
+0.75–0.85 CPU seconds during each 100-call warm `git.read` cell. Sampled
+process RSS summed in the serve container peaked at 18,372–20,532 KiB
+across cells; the sync container's sum peaked at 21,020–45,572 KiB.
+The 25 ms process sampler can miss short-lived workers, and summed RSS
+counts shared pages more than once. Raw CPU, I/O, memory, PID, and
+per-call counters are in the JSONL
+receipt.
+
+| Profile | Initial fetch | Prepare | Publish | Incremental fetch | GC |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| SHA-1 small | 6.43 s | 0.23 s | 0.12 s | 6.57 s | 0.22 s |
+| SHA-1 medium | 6.43 s | 0.27 s | 0.11 s | 6.60 s | 0.93 s |
+| SHA-1 large | 8.56 s | 3.37 s | 0.19 s | 10.85 s | 1.26 s |
+| SHA-256 medium | 6.49 s | 0.28 s | 0.11 s | 6.99 s | 1.76 s |
+
+The large profile had 17,409 native objects. An update above its
+17,412-object approval failed while the published generation remained
+readable. One sync slot took 14.01 s for two manual jobs; two slots took
+14.96 s, with peaks of one and two running jobs respectively and no
+durable scheduler queue. Both jobs shared the paced local upstream host,
+so this run does not demonstrate a throughput gain from the second slot.
+An earlier local large-fixture run on the initial image observed a
+13.37 s GC stage. The 1.26 s final-image observation is not a worst case.
+
+### Limit proposal and qualification boundary
+
+Keep the current defaults. The measurements support a bounded local
+envelope for these synthetic repositories and expose overload as a
+structured response. They do not justify increasing a global cap.
+
+| Control | Current bound and measured evidence | Proposal |
+| --- | --- | --- |
+| Approved refs | 1,024 ordinary-length refs verified and 1,025 denied. Very long names can exhaust the existing 48-request budget. | Keep the 1,024 count and the 256 KiB broker request cap; qualify unusual ref-name distributions per source. |
+| Per-source transfer | The fixture's 8 MiB pack cap admitted 7,371,760 bytes and rejected a larger pack. The global approval maxima remain 256 MiB pack, 384 MiB response, 500,000 objects, and 900 s deadline. | Keep source-specific caps; require inventory and an approved larger-source run before raising any source's values. |
+| Inflation and object size | The largest measured closure had 14,100,527 inflated bytes. The verifier still caps one object at 128 MiB and the closure at 2 GiB. | Keep both caps; their near-boundary behavior is unqualified here. |
+| Admission and deadlines | Readers have four global and two per-repository slots and a 15 s deadline. Sync defaults to two slots, with four as its configured maximum; the source fixture used a 90 s deadline. | Keep these values. The single-repository eight-call load demonstrated bounded rejections and later recovery. |
+| Storage and retention | Staging defaults to an 8 GiB quota and reserves 384 MiB per job. Three inactive generations and those demoted within 24 hours are protected. One-generation allocated storage was 1.09–1.57 times pack bytes. | Keep the quota and retention rules; measure multi-generation pressure and physical ENOSPC before sizing a larger deployment. |
+
+These timings cover one amd64 host, its tested kernel, local synthetic HTTPS,
+and the exact images in the receipt. They do not qualify an official or
+large real repository, another architecture, a remote production network,
+physical power loss, or a full-size 2 GiB closure.
+
+### Reproduction and evidence
+
+Follow the [Phase 7 procedure](phase7-qualification.md#local-procedure).
+The local receipts are in `/tmp/gh-docs-phase7.aXD2TZAw`. The earlier
+attempts are kept alongside the final-image runs for comparison. The
+final set includes `qualified-runtime-revision`, `qualified-image-ids.txt`,
+`qualified-compose-results`, `qualified-phase7.log`,
+`qualified-shutdown-repeat.log`, `qualified-capacity.jsonl`,
+`qualified-minikube.log`, and `qualified-audit/` with image identities,
+SBOMs, vulnerability results, lockfile hashes, and scanner versions.
+All Phase 0–7 Compose and Minikube runs exited zero. The capacity and
+audit commands also exited zero.
+
+The test harnesses removed their Compose projects and Minikube profiles.
+A scoped cleanup check found no Phase 7 containers, networks, volumes,
+Minikube home, or `ghdocs` nftables tables. The 41 local Phase 7 image
+tags, generated source archives,
+Cargo seed, advisory checkout, and prepared SDK fixture were removed.
+Receipt files and scanner output remain under `/tmp` for review.
