@@ -934,3 +934,32 @@ ripgrep matches. Verification of the pinned OxiBelt provenance and
 native SBOM succeeded. The audit could not resolve the yank status of
 some OxiBelt dependencies from the local crates.io cache.
 Native arm64 qualification and live GHCR verification remain open.
+
+### Release version stamping
+
+The `1.0.1` publication stopped at source verification. Its signed tag
+pointed to a commit with Cargo workspace version `0.1.0`. The tag signature
+and exact-commit `main` CI passed independent checks. GitHub marks the
+published release immutable, so the replacement target is `1.0.2`.
+
+On 2026-11-25, local qualification of signed revision `fcc2451` used
+Linux amd64, ext4-backed `/tmp`, rootful Docker `29.10.1`, Compose `5.8.0`,
+Buildx `0.39.1`, Rust `1.100.0`, Node `26.13.1`, and pnpm `12.23.0`.
+Workflow lint, the locked offline Rust gate, all nine release tests with
+the disposable registry, the frozen pnpm install, and Phase 0 Compose
+passed. Frozen Cargo metadata resolved the six production packages at
+the full staged stable and beta versions and the test package at `0.0.0`.
+
+Two independent builders reproduced all three runnable amd64 manifests
+for `1.0.2`. The exact-image Phase 8 restore and matched rollback passed.
+The restored MCP server reported `1.0.2` through the OxiBelt edge.
+
+The exact-image audit reproduced both stamped Cargo input hashes and
+completed frozen Cargo metadata resolution. Trivy `0.76.2` with its
+database updated at 13:07 UTC found one critical and 26 high PostgreSQL
+findings. RustSec revision `b9b8a3c2` found 17 matches in the OxiBelt
+workspace lockfile and zero in the stamped workspace and ripgrep
+lockfiles. OxiBelt provenance and native SBOM verification passed. The
+findings still block release. Scoped Docker and firewall resources were
+removed after the synthetic run. Native arm64, hosted qualification of
+the replacement revision, and GHCR publication remain pending.

@@ -147,13 +147,13 @@ def main():
     with tempfile.TemporaryDirectory(prefix="ghdocs8-audit-", dir="/tmp") as directory:
         work = Path(directory)
         receipt = json.loads((args.bundle / "receipt.json").read_bytes())
-        source = stage_source(receipt["revision"], receipt["version"], work)
-        if cargo_digests(source) != receipt["cargo_inputs"]:
+        workspace = stage_source(receipt["revision"], receipt["version"], work)
+        if cargo_digests(workspace) != receipt["cargo_inputs"]:
             raise ValueError("stamped Cargo inputs do not match the native build receipt")
         cargo_evidence = out / "cargo-inputs"
         cargo_evidence.mkdir()
         for name in CARGO_INPUTS:
-            shutil.copyfile(source / name, cargo_evidence / name)
+            shutil.copyfile(workspace / name, cargo_evidence / name)
         ripgrep = work / "ripgrep.tar.gz"
         download(RIPGREP, "21002cba547651acf2ffb2f1e90010ee9533df3ce8819b171378d55a4f5953fd", ripgrep)
         lock = out / "ripgrep-Cargo.lock"
@@ -174,7 +174,7 @@ def main():
             run("git", "clone", "--depth", "1", "https://github.com/RustSec/advisory-db.git", advisory_db)
         with (out / "rustsec-revision.txt").open("w") as record:
             run("git", "-C", advisory_db, "rev-parse", "HEAD", stdout=record)
-        blockers = supply_chain(out, source, lock, advisory_db)
+        blockers = supply_chain(out, workspace, lock, advisory_db)
         blockers += exact_images(args.bundle, out, args.tag, work)
     write_json(out / "disposition.json", {"blockers": sorted(set(blockers))})
     if blockers:
