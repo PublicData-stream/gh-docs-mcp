@@ -1,6 +1,6 @@
 # Phase 0 prerequisites and qualification
 
-Use Linux `amd64`, rootful Docker with Compose and Buildx, nftables, ext4-backed `/tmp`, Git, Python 3, OpenSSL, Node `26.13.1`, pnpm `12.21.0`, and Rust `1.100.0`. The harness uses root for disposable bind-mount ownership and project-scoped firewall rules. It runs the TypeScript client as the invoking user. Container processes use their declared role UIDs.
+Use Linux `amd64`, rootful Docker with Compose and Buildx, nftables, ext4-backed `/tmp`, Git, Python 3, OpenSSL, Node `26.13.1`, pnpm as pinned in the [client manifest](../scripts/phase0/client/package.json), and Rust `1.100.0`. The harness uses root for disposable bind-mount ownership and project-scoped firewall rules. It runs the TypeScript client as the invoking user. Container processes use their declared role UIDs.
 
 Prefetch the locked inputs and run the qualification from the repository root.
 
