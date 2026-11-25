@@ -343,3 +343,93 @@ preliminary Phase 3 failure is in
 Cleanup removed the disposable Compose projects, scoped firewall tables,
 image tags, Minikube profiles, and generated SDK client fixtures. The
 qualification used synthetic sources on local amd64 profiles.
+
+## Phase 5 qualification
+
+The Phase 5 Compose gate passed on 2026-11-25 UTC with signed runtime
+revision `03618b6bfc901d376d7ccedf4f7e90cda934b65c` and the Compose
+probe at `e0c4b14d6d55377a1441e75f4bd782f76c26f0a3`. The host was Linux
+amd64, kernel `7.0.0-44-generic`, with ext4-backed `/tmp`, rootful Docker
+`29.10.1`, and Compose `5.8.0`. The probes used Rust `1.100.0`, host
+Git `2.53.0`, container Git `2.54.1`, ripgrep `16.0.0`, Python
+`3.14.4`, Node `26.13.1`, and pnpm `12.21.0`.
+
+| Gate | Observed | Result |
+| --- | --- | --- |
+| Offline Rust | Formatting, frozen all-feature and all-target Clippy with warnings denied, unit tests, and doc tests passed. The generated registry matched the committed snapshot. | Pass |
+| A01, A13 | Raw MCP discovery, listing, and calls through the loopback TLS proxy matched the exported schemas. Resolved contexts passed directly into read, search, and history. Search cursors rejected tampering, changed arguments, and a valid expired token. A retained cursor kept its original generation and failed after retirement. The pinned TypeScript SDK `2.4.0` called all twelve tools through the same proxy. | Pass |
+| A14 | Migration from catalog version 5 preserved a published version 1 approval and SELECT-only access. Version 1 retained existing reads and denied both new output forms. Publication under a new approval enabled search and history. Supersession and revocation denied stale contexts and cursors. Selective path grants withheld hidden paths and bytes. | Pass |
+| A15 | Both Git formats matched the pinned ripgrep oracle for CJK, CRLF, exact byte ranges, and repeated blob paths. A reversible raw path, case matching, binary skips, invalid regexes, and explicit oversized-blob omissions were checked. | Pass |
+| A16 | Both Git formats matched Git oracles for graph membership, root and merge handling, patch bytes, and same-path first-parent blame. Binary metadata, rename boundaries, literal metacharacter paths, policy denial, and same-generation enforcement passed. | Pass |
+| A17 | An empty incomplete search page resumed to a later hit. The wide control-byte blob reassembled across multiple responses within the 256 KiB wire cap. The framed worker denied inherited sockets, filesystem and executable access, and forced sandbox setup failed closed. Two held workers made a third request fail admission. Proxy disconnect and deadline each reaped a held worker, and a subsequent request obtained capacity. | Pass |
+| A01–A04 regression | The rebuilt Phase 0 stack passed raw MCP and SDK, role grants and TLS, effective filesystem and egress isolation, and the original worker probes. Landlock ABI 8 was observed. | Pass |
+| A05–A06 regression | Phase 1 passed catalog upgrades, scoped grants, stable reader locks, SHA-1 and SHA-256 native object oracles, and pinned fixture MCP calls. | Pass |
+| A07–A08 regression | Phase 2 passed bounded synthetic HTTPS acquisition, ref policy, malformed and interrupted transfers, candidate recovery, concurrency and quota checks. | Pass |
+| A08–A11 regression | Phase 3 passed malformed pack rejection, interrupted publication and outbox writes, rollback, retention, and maintenance. Database loss with a live reader held the filesystem fence through reap. | Pass |
+| A06, A12–A14 regression | Phase 4 passed both raw-byte oracles, scoped disclosure and SELECT-only grants, generation denial, signed pages, rollback, retirement, supersession and revocation. | Pass |
+| Minikube | Minikube `1.39.0`, rootless Docker `29.10.0`, Kubernetes `1.37.0`, and containerd `2.3.4` published and recovered both formats. The normal Compose serve image passed read, search, and history over pod loopback with serve credentials and the read-only store. | Pass |
+
+The Compose run started at 04:45:33 UTC. The initial fixture commits were
+`abb563788e9fb63dc4a86ef8eea26b5b98501785` for SHA-1 and
+`6d8be56a114aa5e29b4708e3435e894847616712be33d3bc7d3df1b4a19213f4`
+for SHA-256. Preliminary runs caught probe defects in HTTPS connection
+teardown, plain proxy denial handling, and the assumption that an escaped
+blob would fit in two pages. The corrected probe followed the full cursor
+chain. The first Minikube attempt published both formats and stopped at
+the older fixture's blob check. The corrected Minikube probe calls the
+Phase 5 endpoint directly. The Phase 0–4 Compose regression runs started
+at 04:44:16, 04:46:34, 04:49:02, 04:54:05, and 05:01:18 UTC,
+respectively.
+
+### Rebuilt images and reproduction
+
+| Image target | Local image ID |
+| --- | --- |
+| Serve | `sha256:f6784a77c51fb468becbd8f11fff63bce56b68db1937766cc17997733f96e744` |
+| Sync | `sha256:01a6a0c1432ceb69cd1db05135b62a7f8efe6266697a9c2b05ef254fe93004b0` |
+| Feed | `sha256:742a91263ee522fa85510cc6460bfd70a754bcad7e18ebca5489c34991bf8433` |
+| Phase 1 serve | `sha256:eab0616a57e7b6fa6edab13a54d52a1ae29fdb756fd10680bb36dfbab7eb0e08` |
+| Phase 1 sync | `sha256:d58c4939b3962a215f6c8f79666a735b33e9e9c91fe8962ba92f649396a120a9` |
+| Phase 2 sync | `sha256:1448d7a846f98fd1fe2500b83b6467eaf4bddd48cce21ad05e98af1c1b7d9be5` |
+| Phase 2 upstream | `sha256:b2e1a717d29576ae74468e75e5d1c0f8517d191f3d8639b7c99e2ca5d0d9bc29` |
+| Phase 3 serve | `sha256:f4cd10713b3d6a0fe28593d2755045e8f7ab481de274fb53374220138a0a74b3` |
+| Phase 3 sync | `sha256:4367939bdc86e11eb5680c96deae31e64d97ec6a3ed5976ae7d9e65725bfb89c` |
+| Phase 4 serve | `sha256:3bd7b7cb7d4ac0133bf09f37af8c55f21c4206f499cb9263668df111926e1b94` |
+| Pinned PostgreSQL | `sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f` |
+| Pinned proxy and sink | `sha256:0272e4604ed93c1792f03695a033a6e8546840f86e0de20a884bb17d2c924883` |
+
+Buildx Bake built the pinned targets for `linux/amd64` with
+`--allow=network.host` and Docker output. The reproduction commands below
+use the locally built tag and the prepared client and Minikube caches.
+
+~~~sh
+export CARGO_TARGET_DIR=/tmp/rust/target
+scripts/phase0/check-rust.sh
+client_dir=$(scripts/phase0/prepare-client.sh)
+tag=phase5-qualified
+node=$(command -v node)
+
+sudo -n python3 -B scripts/phase5/integration.py --image-tag "$tag" \
+  --node "$node" --client-dir "$client_dir"
+sudo -n python3 -B scripts/phase0/integration.py --skip-build --image-tag "$tag" \
+  --node "$node" --client-dir "$client_dir"
+sudo -n python3 -B scripts/phase1/integration.py --image-tag "$tag" \
+  --node "$node" --client-dir "$client_dir"
+for phase in 2 3 4; do
+  sudo -n python3 -B "scripts/phase$phase/integration.py" --image-tag "$tag"
+done
+python3 -B scripts/phase5/minikube.py \
+  --serve-image "gh-docs-mcp-serve:$tag" \
+  --sync-image "gh-docs-phase3-sync:$tag" \
+  --upstream-image "gh-docs-phase2-upstream:$tag" \
+  --postgres-image "gh-docs-phase5-postgres:$tag" \
+  --bootstrap-cache "$bootstrap_cache"
+~~~
+
+Local transcripts and the Bake inputs are in
+`/tmp/gh-docs-phase5-qualified.4YSNiV7S`. The passing transcripts include
+`phase5-final.log`, `phase0.log` through `phase4.log`, and
+`minikube-serve.log`. Cleanup removed the disposable Compose projects and
+firewall scopes, local test tags, generated SDK client, and Minikube
+profiles. The evidence covers synthetic sources on local amd64 and the
+pinned protocol clients.

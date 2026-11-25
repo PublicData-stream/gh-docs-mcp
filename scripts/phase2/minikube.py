@@ -163,8 +163,8 @@ def resources(root, sync, upstream, postgres, serve=None, *, explore=False, wire
         sync_container["command"][2] += "; " + "; ".join([*publish, "touch /handoff/published"])
         sync_container["volumeMounts"].append(mount("handoff", "/handoff"))
         oracle = [json.loads((fixture / f"{fmt}-oracle.json").read_text()) for fmt in REPOS]
-        reads = [
-            f"gh-docs-phase3-fixture read {repo} active {proof['head' if wire else 'initial']}"
+        reads = [] if wire else [
+            f"gh-docs-phase3-fixture read {repo} active {proof['initial']}"
             for (repo, _), proof in zip(REPOS.values(), oracle, strict=True)
         ]
         serve_command = ["test ! -w /git-store", "test ! -r /git-store/.publication",
@@ -194,7 +194,7 @@ def resources(root, sync, upstream, postgres, serve=None, *, explore=False, wire
                              MCP_ORIGIN="http://127.0.0.1:8080", HEALTH_BIND="127.0.0.1:8081")
             serve_command[0:0] = [
                 """gh-docs-serve & server=$!; trap 'kill "$server"; wait "$server" || true' EXIT""",
-                "timeout 15 sh -c 'until wget -qO /dev/null http://127.0.0.1:8081/healthz; do sleep 1; done'",
+                "timeout 15 sh -c 'until wget -qO /dev/null http://127.0.0.1:8081/healthz 2>/dev/null; do sleep 1; done'",
             ]
         containers.append(container("read", serve, 10001, ["/bin/sh", "-ec",
             "timeout 75 sh -ec 'while ! test -f /handoff/published; do sleep 1; done'; "
@@ -226,6 +226,7 @@ def wire_commands(fmt, context, phrase):
     }
     commands = []
     for name, args, expected in [
+        ("git.read", {"context": context, "path": {"encoding": "utf8", "value": "data/note"}}, phrase),
         ("git.rg", {"context": context, "pattern": phrase, "literal": True}, '"returned_count":2'),
         ("git.log", {"context": context}, '"returned_count":4'),
     ]:

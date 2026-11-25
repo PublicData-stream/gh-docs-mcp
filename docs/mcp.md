@@ -106,9 +106,8 @@ Phase 7.
 Build the pinned images following the [exploration qualification](exploration.md#qualification).
 The Phase 5 Compose probe requires Python `jsonschema` in addition to the
 [Phase 0 prerequisites](deployment-prerequisites.md). Run it against the
-normal serve image. The supplemental Minikube smoke uses the Phase 4 fixture
-target for publication diagnostics and runs its inherited serve binary over
-pod loopback.
+normal serve image. The supplemental Minikube smoke runs the normal serve image over pod loopback
+after publishing both synthetic repositories.
 
 ~~~sh
 export CARGO_TARGET_DIR=/tmp/rust/target
@@ -118,7 +117,7 @@ sudo -n python3 -B scripts/phase5/integration.py --image-tag "$tag" \
   --node "$(command -v node)" --client-dir "$client_dir"
 
 python3 -B scripts/phase5/minikube.py \
-  --serve-image "gh-docs-phase4-serve:$tag" \
+  --serve-image "gh-docs-mcp-serve:$tag" \
   --sync-image "gh-docs-phase3-sync:$tag" \
   --upstream-image "gh-docs-phase2-upstream:$tag" \
   --postgres-image "gh-docs-phase5-postgres:$tag" \
