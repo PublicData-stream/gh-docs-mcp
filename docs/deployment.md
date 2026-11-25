@@ -84,6 +84,9 @@ the restore before any migration or application start.
 
 ## Upgrade and rollback
 
+For planned serve restarts, close the proxy first and reopen it after serve
+is ready. This clears upstream connections held by the old proxy process.
+
 Drain writers and take a verified matching backup. Keep the old role and
 infrastructure digests, proxy configuration, and backup digest together. Bring up the new
 database/image combination with ingress closed. Run the migration as the

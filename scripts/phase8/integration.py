@@ -365,10 +365,9 @@ def rehearse(args, refs, work):
                 """) == "t", "rollback notification did not arrive", seconds=40,
             )
             phase3.assert_pointer(target, repo, record[0], 3, delivered=True)
+        target.compose("stop", "proxy")
         target.compose("restart", "serve")
-        phase3.wait_until(lambda: target.exec("serve", "wget", "-qO", "/dev/null", "-T", "2",
-                                             "http://127.0.0.1:8081/healthz",
-                                             expected=None).returncode == 0, "serve restart failed")
+        open_stack(target)
         for repo, record in records.items():
             assert wire.resolve(repo)["commit_oid"] == record[6]["context"]["commit_oid"]
     # Restore the same pre-upgrade state under the Phase 7 role binaries.
