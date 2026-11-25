@@ -169,9 +169,6 @@ impl<'a, 'reader> Tree<'a, 'reader> {
             path.extend_from_slice(&entry.name);
             let directory = entry.mode == TreeMode::Directory;
             let notice = self.policy.scope.notice(&path, directory);
-            if !descend && matcher.is_some_and(|matcher| !matcher.matches(&path)) {
-                continue;
-            }
             let navigation = notice.is_none() && directory && self.navigation(entry.oid, &path)?;
             if notice.is_none() && !navigation {
                 continue;
@@ -181,6 +178,9 @@ impl<'a, 'reader> Tree<'a, 'reader> {
                     return Ok(false);
                 }
             } else {
+                if matcher.is_some_and(|matcher| !matcher.matches(&path)) {
+                    continue;
+                }
                 let path = BytePath::encode(&path).map_err(|_| Error::UnsupportedEncoding)?;
                 let (mode, kind) = mode(&entry.mode);
                 let mut item = json!({

@@ -25,12 +25,21 @@ use crate::{
 
 const FENCE_WAIT: Duration = Duration::from_secs(2);
 
-#[derive(Debug)]
 pub struct GenerationUnavailable;
+
+impl GenerationUnavailable {
+    const MESSAGE: &str = "generation unavailable";
+}
 
 impl std::fmt::Display for GenerationUnavailable {
     fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        out.write_str("generation unavailable")
+        out.write_str(Self::MESSAGE)
+    }
+}
+
+impl std::fmt::Debug for GenerationUnavailable {
+    fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(Self::MESSAGE, out)
     }
 }
 
