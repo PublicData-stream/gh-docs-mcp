@@ -30,6 +30,10 @@ const MAX_MAP_OUTPUT: usize = 64 * 1024 * 1024;
 const MAX_METADATA_OUTPUT: usize = 96 * 1024 * 1024;
 const MAX_INFLATED: u64 = 2 * 1024 * MIB;
 const MAX_OBJECT: u64 = 128 * MIB;
+// Git expands each exact fetch refspec into six protocol-v2 ref prefixes.
+// Leave room for framing and future prefix variants inside the worker's
+// 256 KiB request cap. The count and byte estimates both constrain batching.
+const FETCH_PREFIX_BUDGET: usize = 192 * 1024;
 const TAG_DEPTH: usize = 16;
 const TREE_DEPTH: usize = 256;
 
@@ -157,25 +161,41 @@ pub async fn acquire(
         .await?;
     let before = parse_observation(&before, approval, format)
         .map_err(|_| TransferError::permanent("ref_policy"))?;
-    let mut fetch = args(&[
-        "fetch",
-        // Keep routine per-ref summaries within the bounded diagnostic channel.
-        "--quiet",
-        "--atomic",
-        "--no-tags",
-        "--no-recurse-submodules",
-        "--no-auto-maintenance",
-        "--no-write-fetch-head",
-        "ghdocs::approved",
-    ]);
-    for (index, name) in before.refs.keys().enumerate() {
-        let mut refspec = OsString::from("+");
-        refspec.push(OsStr::from_bytes(name.bytes()));
-        refspec.push(format!(":refs/gh-docs/fetch/{index}"));
-        fetch.push(refspec);
+    let mut pending = before.refs.iter().enumerate().peekable();
+    while pending.peek().is_some() {
+        let mut fetch = args(&[
+            "fetch",
+            // Keep routine per-ref summaries within the diagnostic cap.
+            "--quiet",
+            "--atomic",
+            "--no-tags",
+            "--no-recurse-submodules",
+            "--no-auto-maintenance",
+            "--no-write-fetch-head",
+            "ghdocs::approved",
+        ]);
+        let mut wants = BTreeSet::new();
+        let mut estimated_request = 512;
+        while let Some((_, (name, _))) = pending.peek() {
+            // A 4,096-byte valid ref still fits by itself. Charge each of
+            // Git's six prefixes for the name, fixed prefix, and packet line.
+            let charge = 6 * (name.bytes().len() + 64);
+            if estimated_request + charge > FETCH_PREFIX_BUDGET {
+                break;
+            }
+            let (index, (name, target)) = pending.next().ok_or_else(invalid)?;
+            let mut refspec = OsString::from("+");
+            refspec.push(OsStr::from_bytes(name.bytes()));
+            refspec.push(format!(":refs/gh-docs/fetch/{index}"));
+            fetch.push(refspec);
+            wants.insert(target.to_string());
+            estimated_request += charge;
+        }
+        if wants.is_empty() {
+            return Err(invalid());
+        }
+        upstream.git(attempt, &working, &fetch, 0, &wants).await?;
     }
-    let wants = before.refs.values().map(ToString::to_string).collect();
-    upstream.git(attempt, &working, &fetch, 0, &wants).await?;
     let after = upstream
         .git(attempt, &working, &ls, 4 * MIB as usize, &empty)
         .await?;
