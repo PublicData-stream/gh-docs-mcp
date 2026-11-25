@@ -6,6 +6,7 @@ import json
 import os
 from pathlib import Path
 import secrets
+import shlex
 import shutil
 import subprocess
 import tarfile
@@ -67,7 +68,7 @@ def container(name, image, uid, command, mounts, memory="256Mi", cpu="1", env=No
     return spec
 
 
-def resources(root, sync, upstream, postgres, serve=None):
+def resources(root, sync, upstream, postgres, serve=None, *, explore=False):
     fixture = root / "fixture"
     prepare(fixture)
     archive = root / "fixture.tar.gz"
@@ -77,6 +78,11 @@ def resources(root, sync, upstream, postgres, serve=None):
     ca, certificate, key = db_certificates(root)
     passwords = {f"{role}-password": secrets.token_hex(24)
                  for role in ("admin", "serve", "migrate", "sync")}
+    policies = {fmt: approval(fmt) for fmt in REPOS}
+    if explore:
+        for policy in policies.values():
+            policy["exploration"] = {"version": 1, "metadata_notice": "Synthetic metadata",
+                                     "scope": {"kind": "whole", "notice": "Synthetic source bytes"}}
     objects = [
         {"apiVersion": "v1", "kind": "Namespace", "metadata": {"name": NAMESPACE, "labels": {
             "pod-security.kubernetes.io/enforce": "restricted"}}},
@@ -87,7 +93,7 @@ def resources(root, sync, upstream, postgres, serve=None):
                         "upstream-ca.crt": (fixture / "tls/ca.crt").read_bytes()}),
         {"apiVersion": "v1", "kind": "ConfigMap", "metadata": {"name": "fixture-config"}, "data": {
             "bootstrap.sh": (ROOT / "scripts/phase0/bootstrap-db.sh").read_text(),
-            **{f"{fmt}.json": json.dumps(approval(fmt)) for fmt in REPOS},
+            **{f"{fmt}.json": json.dumps(policy) for fmt, policy in policies.items()},
         }},
     ]
     db_client = {"DB_HOST": "localhost", "DB_CA_FILE": "/run/secrets/db-ca.crt",
@@ -156,12 +162,28 @@ def resources(root, sync, upstream, postgres, serve=None):
         ]
         serve_command = ["test ! -w /git-store", "test ! -r /git-store/.publication",
                          "test ! -e /git-sync-private", *reads]
+        serve_env = db_client.copy()
+        credentials = {"db-ca.crt": ca, "db-password": passwords["serve-password"]}
+        if explore:
+            serve_env.update(EXPLORATION_CURSOR_KEY_FILE="/run/secrets/cursor.key",
+                             EXPLORATION_CURSOR_KEY_ID="fixture-v1")
+            credentials["cursor.key"] = secrets.token_bytes(48)
+            for (fmt, (repo, _)), proof in zip(REPOS.items(), oracle, strict=True):
+                context = {"repository_id": repo, "generation_id": "0",
+                           "object_format": fmt, "commit_oid": proof["initial"]}
+                request = {"tool": "git.read", "arguments": {"context": context,
+                    "path": {"encoding": "utf8", "value": "original.bin"},
+                    "range": {"start": 0, "end": 32}, "encoding": "base64"}}
+                expected = as_b64((fixture / f"{fmt}-oracle.bin").read_bytes()[:32])
+                serve_command.append(
+                    f"printf '%s' {shlex.quote(json.dumps(request))} | gh-docs-phase4-fixture | "
+                    f"grep -F {shlex.quote(json.dumps('data') + ':' + json.dumps(expected))}")
         containers.append(container("read", serve, 10001, ["/bin/sh", "-ec",
             "timeout 75 sh -ec 'while ! test -f /handoff/published; do sleep 1; done'; "
             + "; ".join(serve_command)],
             [mount("serve-auth", "/run/secrets", True), mount("handoff", "/handoff", True),
-             mount("canonical", "/git-store", True, "role")], env=db_client))
-        objects.append(secret("serve", {"db-ca.crt": ca, "db-password": passwords["serve-password"]}))
+             mount("canonical", "/git-store", True, "role")], env=serve_env))
+        objects.append(secret("serve", credentials))
         volumes.extend([{"name": "serve-auth", "secret": {"secretName": "serve"}},
                         {"name": "handoff", "emptyDir": {}}])
     volumes.extend({"name": name, "emptyDir": {}} for name in
@@ -178,8 +200,9 @@ def resources(root, sync, upstream, postgres, serve=None):
     return {"apiVersion": "v1", "kind": "List", "items": [*objects, job]}
 
 
-def smoke(args, serve=None):
-    profile = f"ghdocs{3 if serve else 2}-{secrets.token_hex(5)}"
+def smoke(args, serve=None, *, explore=False):
+    phase = 4 if explore else 3 if serve else 2
+    profile = f"ghdocs{phase}-{secrets.token_hex(5)}"
     root = Path(tempfile.mkdtemp(prefix=f"{profile}-minikube-", dir="/tmp"))
     environment = {**os.environ, "MINIKUBE_HOME": str(root), "KUBECONFIG": str(root / "kubeconfig"),
                    "TMPDIR": str(root), "DOCKER_CONTEXT": "rootless", "MINIKUBE_IN_STYLE": "false"}
@@ -209,7 +232,8 @@ def smoke(args, serve=None):
         execute([*docker, "image", "inspect", "--format", "{{.Id}}", *images])
         execute([*docker, "image", "save", "-o", bundle, *images], timeout=150)
         manifest = root / "job.json"
-        manifest.write_text(json.dumps(resources(root, args.sync_image, args.upstream_image, postgres, serve)))
+        manifest.write_text(json.dumps(resources(
+            root, args.sync_image, args.upstream_image, postgres, serve, explore=explore)))
         started = True
         execute([*minikube, "start", "--driver=docker", "--container-runtime=containerd", "--nodes=1",
                  "--cpus=4", "--memory=6144", "--listen-address=127.0.0.1", "--install-addons=false",
@@ -232,8 +256,7 @@ def smoke(args, serve=None):
         if started and execute([*minikube, "delete"], timeout=100, check=False).returncode:
             raise RuntimeError(f"cleanup pending for Minikube profile {profile} at {root}")
         shutil.rmtree(root)
-    print("Phase 3 Minikube publication and read-only serving smoke passed" if serve
-          else "Phase 2 Minikube HTTPS and private candidate smoke passed", flush=True)
+    print(f"Phase {phase} Minikube smoke passed", flush=True)
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ use gh_docs_core::{
     git::{ObjectFormat, Oid, RepositoryId},
 };
 use gh_docs_git::{
-    reader::{Reachability, Reader},
+    reader::{Batch, Reachability, Reader},
     store::{self, Fence, LockMode, LockScope},
 };
 use tokio_postgres::{Client, IsolationLevel, Transaction};
@@ -129,7 +129,11 @@ async fn reader_key(
         .await?
         .get::<_, bool>(0)
     {
-        return Err("database generation fence busy".into());
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::WouldBlock,
+            "database generation fence busy",
+        )
+        .into());
     }
     Ok(())
 }
@@ -144,12 +148,20 @@ pub struct Generation {
 
 impl Generation {
     pub fn reachable(&self, reader: &Reader, commit: Oid) -> Result<Reachability> {
+        Ok(reader.batch(|batch| self.reachable_with(batch, commit))?)
+    }
+
+    pub fn reachable_with(
+        &self,
+        batch: &mut Batch<'_>,
+        commit: Oid,
+    ) -> std::io::Result<Reachability> {
         let roots: Vec<_> = self
             .refs
             .iter()
             .filter_map(|entry| entry.peeled_commit)
             .collect();
-        Ok(reader.batch(|batch| batch.reachable(&roots, commit))?)
+        batch.reachable(&roots, commit)
     }
 }
 
@@ -179,10 +191,6 @@ pub async fn read_exploration<T: Send + 'static>(
     requested: Option<i64>,
     operation: impl FnOnce(Generation, &Reader) -> Result<T> + Send + 'static,
 ) -> Result<T> {
-    // Preflight before touching the store. The authoritative check is fenced.
-    if exploration::get(client, repo, requested).await?.is_none() {
-        return Err(GenerationUnavailable.into());
-    }
     read(client, repo, requested, true, operation).await
 }
 

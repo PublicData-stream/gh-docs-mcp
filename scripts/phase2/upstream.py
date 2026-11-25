@@ -27,7 +27,7 @@ class Endpoint(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             return
         parts = path.path.split("/")
-        if len(parts) < 3 or parts[1] not in ("sha1.git", "sha256.git"):
+        if len(parts) < 3 or parts[1] not in ("sha1.git", "sha256.git", "cross.git"):
             self.send_error(404)
             return
         if path.path not in (f"/{parts[1]}/info/refs", f"/{parts[1]}/git-upload-pack"):

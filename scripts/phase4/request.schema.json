@@ -1,0 +1,541 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Request",
+  "oneOf": [
+    {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "$ref": "#/$defs/RepositorySearch"
+        },
+        "tool": {
+          "type": "string",
+          "const": "repository.search"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "arguments"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "$ref": "#/$defs/RepositoryInfo"
+        },
+        "tool": {
+          "type": "string",
+          "const": "repository.info"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "arguments"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "$ref": "#/$defs/Refs"
+        },
+        "tool": {
+          "type": "string",
+          "const": "git.refs"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "arguments"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "$ref": "#/$defs/Resolve"
+        },
+        "tool": {
+          "type": "string",
+          "const": "git.resolve"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "arguments"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "$ref": "#/$defs/ListTree"
+        },
+        "tool": {
+          "type": "string",
+          "const": "git.ls_tree"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "arguments"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "$ref": "#/$defs/Find"
+        },
+        "tool": {
+          "type": "string",
+          "const": "git.find"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "arguments"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "$ref": "#/$defs/Read"
+        },
+        "tool": {
+          "type": "string",
+          "const": "git.read"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "arguments"
+      ]
+    }
+  ],
+  "$defs": {
+    "BytePath": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "encoding": {
+              "type": "string",
+              "const": "utf8"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "encoding",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "encoding": {
+              "type": "string",
+              "const": "base64"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "encoding",
+            "value"
+          ]
+        }
+      ]
+    },
+    "ByteRange": {
+      "type": "object",
+      "properties": {
+        "end": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        },
+        "start": {
+          "type": "integer",
+          "format": "uint64",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "start",
+        "end"
+      ]
+    },
+    "ByteString": {
+      "description": "Encode a name whose byte grammar is validated by its caller.",
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "encoding": {
+              "type": "string",
+              "const": "utf8"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "encoding",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "encoding": {
+              "type": "string",
+              "const": "base64"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "encoding",
+            "value"
+          ]
+        }
+      ]
+    },
+    "Context": {
+      "type": "object",
+      "properties": {
+        "commit_oid": {
+          "type": "string"
+        },
+        "generation_id": {
+          "type": "string"
+        },
+        "object_format": {
+          "type": "string"
+        },
+        "repository_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "repository_id",
+        "generation_id",
+        "object_format",
+        "commit_oid"
+      ]
+    },
+    "Encoding": {
+      "type": "string",
+      "enum": [
+        "utf8",
+        "base64"
+      ]
+    },
+    "Find": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/Context"
+        },
+        "depth": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "pattern": {
+          "$ref": "#/$defs/Pattern"
+        },
+        "root": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BytePath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "context",
+        "pattern"
+      ]
+    },
+    "ListTree": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/Context"
+        },
+        "depth": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0
+        },
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "root": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/BytePath"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "context"
+      ]
+    },
+    "Page": {
+      "type": "object",
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "limit": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "Pattern": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "literal"
+            },
+            "value": {
+              "$ref": "#/$defs/ByteString"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "glob"
+            },
+            "value": {
+              "$ref": "#/$defs/ByteString"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "value"
+          ]
+        }
+      ]
+    },
+    "Read": {
+      "type": "object",
+      "properties": {
+        "context": {
+          "$ref": "#/$defs/Context"
+        },
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "encoding": {
+          "$ref": "#/$defs/Encoding",
+          "default": "utf8"
+        },
+        "path": {
+          "$ref": "#/$defs/BytePath"
+        },
+        "range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ByteRange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "context",
+        "path"
+      ]
+    },
+    "Refs": {
+      "type": "object",
+      "properties": {
+        "generation_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "repository_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "repository_id"
+      ]
+    },
+    "RepositoryInfo": {
+      "type": "object",
+      "properties": {
+        "repository_id": {
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "repository_id"
+      ]
+    },
+    "RepositorySearch": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "query": {
+          "type": "string",
+          "default": ""
+        }
+      },
+      "additionalProperties": false
+    },
+    "Resolve": {
+      "type": "object",
+      "properties": {
+        "generation_id": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "repository_id": {
+          "type": "string"
+        },
+        "selector": {
+          "$ref": "#/$defs/Selector"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "repository_id",
+        "selector"
+      ]
+    },
+    "Selector": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "ref"
+            },
+            "value": {
+              "$ref": "#/$defs/ByteString"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "oid"
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "value"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "default"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind"
+          ]
+        }
+      ]
+    }
+  }
+}

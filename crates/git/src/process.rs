@@ -25,6 +25,10 @@ pub(crate) struct Process {
 }
 
 impl Process {
+    pub(crate) fn check(&self) -> io::Result<()> {
+        remaining(self.deadline, self.cancellation.as_deref()).map(|_| ())
+    }
+
     pub(crate) fn spawn(
         mut command: Command,
         deadline: Instant,

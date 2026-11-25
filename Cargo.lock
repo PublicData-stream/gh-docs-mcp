@@ -510,6 +510,7 @@ name = "gh-docs-core"
 version = "0.1.0"
 dependencies = [
  "base64 0.22.1",
+ "schemars",
  "serde",
  "serde_json",
  "sha2",
@@ -537,6 +538,7 @@ dependencies = [
  "gh-docs-sync",
  "gh-docs-test-support",
  "rmcp",
+ "schemars",
  "serde_json",
  "tokio",
 ]
@@ -545,7 +547,17 @@ dependencies = [
 name = "gh-docs-search"
 version = "0.1.0"
 dependencies = [
+ "base64 0.22.1",
+ "gh-docs-core",
  "gh-docs-git",
+ "gh-docs-storage",
+ "ring",
+ "schemars",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-postgres",
+ "uuid",
 ]
 
 [[package]]

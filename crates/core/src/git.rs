@@ -185,7 +185,9 @@ impl RefName {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
 #[serde(
     tag = "encoding",
     content = "value",
@@ -198,7 +200,9 @@ pub enum BytePath {
 }
 
 /// Encode a name whose byte grammar is validated by its caller.
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, schemars::JsonSchema,
+)]
 #[serde(
     tag = "encoding",
     content = "value",

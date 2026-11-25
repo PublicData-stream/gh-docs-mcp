@@ -27,13 +27,14 @@ APPROVAL = "/phase2-approval.json"
 
 
 @contextmanager
-def stack(tag, *, publication=False):
-    project = f"ghdocs{3 if publication else 2}-{secrets.token_hex(5)}"
+def stack(tag, *, publication=False, fixture_setup=prepare, serve_target=None):
+    phase = 4 if serve_target == "phase4-serve" else 3 if publication else 2
+    project = f"ghdocs{phase}-{secrets.token_hex(5)}"
     root = Path(tempfile.mkdtemp(prefix=f"{project}-", dir="/tmp"))
     table = project.replace("-", "_")
     instance = phase0.Stack(root, project, tag)
     upstream = root / "upstream"
-    prepare(upstream)
+    fixture_setup(upstream)
     (upstream / "tls/upstream.key").chmod(0o640)
     os.chown(upstream / "tls/upstream.key", 0, 10002)
     approval_path = root / "approval.json"
@@ -42,7 +43,8 @@ def stack(tag, *, publication=False):
     instance.env["UPSTREAM_IP"] = address
     override = root / "phase2.json"
     sync = "phase3-sync" if publication else "phase2-sync"
-    serve = {"serve": {"image": f"gh-docs-phase3-serve:{tag}"}} if publication else {}
+    serve_target = serve_target or ("phase3-serve" if publication else None)
+    serve = {"serve": {"image": f"gh-docs-{serve_target}:{tag}"}} if serve_target else {}
     override.write_text(json.dumps({"services": {
         **serve,
         "sync": {

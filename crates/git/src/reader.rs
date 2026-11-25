@@ -2,10 +2,13 @@
 
 use std::{
     collections::HashSet,
-    io::{self, BufRead, Read},
+    io::{self, BufRead, Read, Write},
     os::unix::process::CommandExt,
     process::Command,
-    sync::{Arc, atomic::AtomicBool},
+    sync::{
+        Arc,
+        atomic::{AtomicBool, Ordering},
+    },
     time::{Duration, Instant},
 };
 
@@ -21,14 +24,28 @@ const READER: &str = "/usr/local/bin/gh-docs-git-reader";
 const BLOB_BYTES: usize = 8 * 1024 * 1024;
 const TOTAL_BYTES: usize = 128 * 1024 * 1024;
 const TOTAL_OBJECTS: usize = 50_000;
+const TREE_MEMORY_BUDGET: usize = 16 * 1024 * 1024;
 const TAG_DEPTH: usize = 16;
 const WALL_LIMIT: Duration = Duration::from_secs(15);
+const WORKER_READY: u8 = b'+';
+const WORKER_DENIED: u8 = b'-';
+
+#[derive(Debug)]
+pub struct SandboxUnavailable;
+
+impl std::fmt::Display for SandboxUnavailable {
+    fn fmt(&self, out: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        out.write_str("sandbox_unavailable")
+    }
+}
+
+impl std::error::Error for SandboxUnavailable {}
 
 pub struct Reader {
     location: Location,
     format: ObjectFormat,
     deadline: Instant,
-    force_failure: bool,
+    force_failure: AtomicBool,
     _fences: Vec<Fence>,
     cancellation: Option<Arc<AtomicBool>>,
 }
@@ -49,7 +66,7 @@ impl Reader {
             location,
             format,
             deadline,
-            force_failure: false,
+            force_failure: AtomicBool::new(false),
             _fences: fence.into_iter().collect(),
             cancellation: None,
         })
@@ -67,24 +84,41 @@ impl Reader {
             location: Location::Canonical(repo),
             format,
             deadline: Instant::now() + WALL_LIMIT,
-            force_failure: false,
+            force_failure: AtomicBool::new(false),
             _fences: vec![generation, repository],
             cancellation: Some(cancellation),
         }
     }
 
     #[doc(hidden)]
-    pub fn force_setup_failure_for_probe(mut self) -> Self {
-        self.force_failure = true;
+    pub fn force_setup_failure_for_probe(self) -> Self {
+        self.fail_setup_for_probe();
         self
     }
 
-    pub fn batch<T>(&self, operation: impl FnOnce(&mut Batch) -> io::Result<T>) -> io::Result<T> {
+    #[doc(hidden)]
+    pub fn fail_setup_for_probe(&self) {
+        self.force_failure.store(true, Ordering::Relaxed);
+    }
+
+    pub fn batch<T>(
+        &self,
+        operation: impl FnOnce(&mut Batch<'_>) -> io::Result<T>,
+    ) -> io::Result<T> {
+        self.with_batch(operation)
+    }
+
+    pub fn with_batch<T, E: From<io::Error>>(
+        &self,
+        operation: impl FnOnce(&mut Batch<'_>) -> Result<T, E>,
+    ) -> Result<T, E> {
         let mut batch = Batch {
             process: self.spawn(None)?,
+            reader: self,
             format: self.format,
             bytes_left: TOTAL_BYTES,
             objects_left: TOTAL_OBJECTS,
+            tree_memory_left: TREE_MEMORY_BUDGET,
         };
         let result = operation(&mut batch)?;
         batch.process.finish()?;
@@ -92,31 +126,7 @@ impl Reader {
     }
 
     pub fn tree(&self, tree: Oid) -> io::Result<Vec<TreeEntry>> {
-        require_format(self.format, tree)?;
-        self.batch(|batch| match batch.info(tree)? {
-            Some(ObjectInfo {
-                kind: ObjectType::Tree,
-                ..
-            }) => Ok(()),
-            _ => Err(invalid("expected a Git tree object")),
-        })?;
-        let mut process = self.spawn(Some(tree))?;
-        let mut output = Vec::new();
-        let mut names = HashSet::new();
-        let mut bytes_left = TOTAL_BYTES;
-        while let Some(record) = frame(&mut process.output, 4250)? {
-            bytes_left = bytes_left.checked_sub(record.len()).ok_or_else(budget)?;
-            if output.len() >= TOTAL_OBJECTS {
-                return Err(budget());
-            }
-            let entry = parse_tree(self.format, &record)?;
-            if !names.insert(entry.name.clone()) {
-                return Err(invalid("duplicate Git tree entry"));
-            }
-            output.push(entry);
-        }
-        process.finish()?;
-        Ok(output)
+        self.batch(|batch| batch.tree(tree))
     }
 
     fn spawn(&self, tree: Option<Oid>) -> io::Result<Process> {
@@ -132,18 +142,30 @@ impl Reader {
         } else {
             command.arg("batch");
         }
-        if self.force_failure {
+        if self.force_failure.load(Ordering::Relaxed) {
             command.arg("--fail-setup");
         }
-        Process::spawn(command, self.deadline, self.cancellation.clone())
+        let mut process = Process::spawn(command, self.deadline, self.cancellation.clone())?;
+        let mut startup = [0];
+        process.output.read_exact(&mut startup)?;
+        match startup[0] {
+            WORKER_READY => Ok(process),
+            WORKER_DENIED => Err(io::Error::new(
+                io::ErrorKind::PermissionDenied,
+                SandboxUnavailable,
+            )),
+            _ => Err(invalid("invalid Git worker startup frame")),
+        }
     }
 }
 
-pub struct Batch {
+pub struct Batch<'a> {
     process: Process,
+    reader: &'a Reader,
     format: ObjectFormat,
     bytes_left: usize,
     objects_left: usize,
+    tree_memory_left: usize,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -152,10 +174,24 @@ pub struct ObjectInfo {
     pub size: usize,
 }
 
-impl Batch {
+impl Batch<'_> {
+    pub fn check(&self) -> io::Result<()> {
+        self.process.check()
+    }
+
+    fn charge_bytes(&mut self, bytes: usize) -> io::Result<()> {
+        self.bytes_left = self.bytes_left.checked_sub(bytes).ok_or_else(budget)?;
+        Ok(())
+    }
+
+    pub fn charge_visits(&mut self, visits: usize) -> io::Result<()> {
+        self.objects_left = self.objects_left.checked_sub(visits).ok_or_else(budget)?;
+        Ok(())
+    }
+
     pub fn info(&mut self, oid: Oid) -> io::Result<Option<ObjectInfo>> {
         require_format(self.format, oid)?;
-        self.objects_left = self.objects_left.checked_sub(1).ok_or_else(budget)?;
+        self.charge_visits(1)?;
         self.process.send(format!("info {oid}\0").as_bytes())?;
         self.header(oid)
     }
@@ -173,7 +209,7 @@ impl Batch {
         if info.size > limit {
             return Err(budget());
         }
-        self.bytes_left = self.bytes_left.checked_sub(info.size).ok_or_else(budget)?;
+        self.charge_bytes(info.size + 1)?;
         self.process.send(format!("contents {oid}\0").as_bytes())?;
         let reported = self.header(oid)?.ok_or_else(missing)?;
         if reported != info {
@@ -187,6 +223,34 @@ impl Batch {
     pub fn commit(&mut self, oid: Oid) -> io::Result<CommitLinks> {
         let raw = self.contents(oid, ObjectType::Commit)?;
         parse_commit(self.format, &raw)
+    }
+
+    pub fn tree(&mut self, tree: Oid) -> io::Result<Vec<TreeEntry>> {
+        if !self
+            .info(tree)?
+            .is_some_and(|info| info.kind == ObjectType::Tree)
+        {
+            return Err(invalid("expected a Git tree object"));
+        }
+        let mut process = self.reader.spawn(Some(tree))?;
+        let mut output = Vec::new();
+        while let Some(record) = frame(&mut process.output, 4250)? {
+            self.charge_visits(1)?;
+            self.charge_bytes(record.len() + 1)?;
+            self.tree_memory_left = self
+                .tree_memory_left
+                .checked_sub(record.len() + size_of::<TreeEntry>())
+                .ok_or_else(budget)?;
+            let entry = parse_tree(self.format, &record)?;
+            output.push(entry);
+        }
+        process.finish()?;
+        let mut names: Vec<_> = output.iter().map(|entry| entry.name.as_slice()).collect();
+        names.sort_unstable();
+        if names.windows(2).any(|pair| pair[0] == pair[1]) {
+            return Err(invalid("duplicate Git tree entry"));
+        }
+        Ok(output)
     }
 
     pub fn peel_commit(&mut self, mut oid: Oid) -> io::Result<Option<Oid>> {
@@ -215,6 +279,15 @@ impl Batch {
         require_format(self.format, target)?;
         if roots.len() > TOTAL_OBJECTS {
             return Ok(Reachability::Indeterminate);
+        }
+        if roots.contains(&target) {
+            return match self.commit(target) {
+                Ok(_) => Ok(Reachability::Reachable),
+                Err(error) if error.kind() == io::ErrorKind::FileTooLarge => {
+                    Ok(Reachability::Indeterminate)
+                }
+                Err(error) => Err(error),
+            };
         }
         let mut seen = HashSet::new();
         let mut pending = Vec::new();
@@ -249,6 +322,7 @@ impl Batch {
 
     fn header(&mut self, oid: Oid) -> io::Result<Option<ObjectInfo>> {
         let record = frame(&mut self.process.output, 128)?.ok_or_else(missing)?;
+        self.charge_bytes(record.len() + 1)?;
         parse_header(oid, &record)
     }
 }
@@ -266,14 +340,14 @@ pub enum Reachability {
     Indeterminate,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct TreeEntry {
     pub name: Vec<u8>,
     pub oid: Oid,
     pub mode: TreeMode,
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TreeMode {
     Directory,
     Regular,
@@ -488,8 +562,13 @@ pub fn worker(args: &[String]) -> io::Result<()> {
         _ => return Err(invalid("unsupported Git worker operation")),
     }
     ensure_time(deadline)?;
-    sandbox::confine(sandbox::Profile::Git, Some(repo.file), force_failure)
-        .map_err(|error| io::Error::other(format!("sandbox_unavailable: {error}")))?;
+    if let Err(error) = sandbox::confine(sandbox::Profile::Git, Some(repo.file), force_failure) {
+        io::stdout().write_all(&[WORKER_DENIED])?;
+        io::stdout().flush()?;
+        return Err(io::Error::other(format!("sandbox_unavailable: {error}")));
+    }
+    io::stdout().write_all(&[WORKER_READY])?;
+    io::stdout().flush()?;
     Err(command.exec())
 }
 
