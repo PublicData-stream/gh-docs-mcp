@@ -44,6 +44,11 @@ unapproved default branch, or a noncommit root fails reconciliation. Annotated
 tags support up to 16 peel steps. Full-closure approval covers every Git object
 reachable under these refs, including the history and full tree.
 
+The optional Phase 4 `exploration` field records reviewed permission to
+return source metadata, paths, and bytes. Register a newer policy version and
+publish a generation verified under it to enable the private exploration
+interface. [Exploration approval and notice format](exploration.md#output-approval)
+
 ~~~sh
 docker compose --profile operator run --rm --no-deps migrate --migrate
 docker compose --profile operator run --rm --no-deps \

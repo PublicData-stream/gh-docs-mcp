@@ -6,4 +6,6 @@ An approval records canonical HTTPS upstream identity, exact ref and path scope,
 
 Allow revocation to override retained generations and cached contexts. Record the withdrawal, stop new reads under the affected policy, and document treatment of in-flight responses, retirement, and backups. Keep live acquisition disabled until that approval exists.
 
+Phase 4 requires a versioned exploration grant for catalog and object output. Review metadata and approved history alongside each whole-closure, exact-leaf, or subtree grant. A structural ancestor carries its navigation name only when the selected commit contains an approved descendant. The ancestor tree OID is withheld unless that tree is fully approved. [Exploration contract](../exploration.md#output-approval)
+
 [GitHub Docs upstream license summary](https://github.com/github/docs#license)

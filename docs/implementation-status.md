@@ -257,3 +257,89 @@ image tags, generated fixtures, and SDK install directory were removed.
 These results qualify synthetic process-interruption recovery on the
 declared local profiles. Physical power-loss durability, live acquisition,
 ARM64, hosted CI, and production deployment remain outside this run.
+
+## Phase 4 qualification
+
+The local Phase 4 gate passed on signed implementation revision
+`2eefc311e4d95be5c97f82510bdf94094155b0a2` on 2026-11-25 UTC. The Compose
+host was Linux amd64, kernel `7.0.0-44-generic`, with ext4-backed `/tmp`,
+rootful Docker `29.10.1`, and Compose `5.8.0`. The tools were Rust
+`1.100.0`, host Git `2.53.0`, image Git `2.54.1`, Python `3.14.4`,
+Node `26.13.1`, and pnpm `12.21.0`.
+
+| Gate | Observed | Result |
+| --- | --- | --- |
+| Offline Rust | Format, frozen Clippy with warnings denied, all-features workspace tests, and doc tests passed. Cursor tests checked HMAC tampering, argument and tool binding, and expiry without renewal. | Pass |
+| A06 | The private JSON interface matched independent Git oracles for both object formats, including raw paths, modes, native OIDs, CRLF, NUL, invalid UTF-8, symlinks, gitlinks, empty objects, exact slices, and UTF-8 page boundaries. | Pass |
+| A12 | The fixture denied hidden, unreachable, staging, ready, and cross-repository objects and returned the same outcome for denied and missing objects. It resolved nested approved tags and rejected invalid revision and path expressions. | Pass |
+| A13 | The in-image request schema matched the snapshot. Returned contexts composed directly with other operations. Raw-path pagination was deterministic. Signed ref and tree pages stayed pinned through force push and rollback and failed after retirement. | Pass |
+| A14 | The selective grant exposed only approved paths and their reviewed notices. Navigation ancestors omitted tree OIDs. Policy supersession and revocation denied subsequent reads. Acquisition-only approvals stayed outside the exploration projection. | Pass |
+| Phase 4 limits and migration | The 50,000-entry fixture returned explicit incomplete coverage. Oversized blob reads and concurrent overload were bounded. Forced worker setup failure returned `sandbox_unavailable`. Migration from catalog version 4 with published records, repeat migration, and SELECT-only grants passed. | Pass |
+| A01–A04 regression | The rebuilt Phase 0 stack passed the pinned MCP wire and TypeScript client `2.4.0` probes, database TLS and role grants, effective mounts and networks, and Git and search confinement. Landlock ABI 8 was observed. | Pass |
+| A05–A06 regression | Phase 1 preserved prior catalog and fixture records across upgrade, kept reader lock inodes stable, and matched the native Git oracle in both object formats. | Pass |
+| A07–A08 regression | Phase 2 passed bounded HTTPS acquisition, ref policy, interrupted and malformed transfers, recovery, resource limits, and concurrent admission. Private candidates stayed outside the published catalog. | Pass |
+| A08–A11 regression | Phase 3 exercised pack rejection, interrupted publication and outbox writes, rollback, retention and GC. Database loss with a live Git child held the filesystem fence through reap. | Pass |
+| Minikube | The disposable Minikube `1.39.0` profile used rootless Docker `29.10.0`, Kubernetes `1.37.0`, and containerd `2.3.4`. Both formats were published, recovered, and read byte-for-byte through the same Phase 4 image with serve credentials and a read-only store. | Pass |
+
+The initial Phase 4 fixture commits were
+`c0a821121825bf4d7262cf5dbb14182a08f716be` for SHA-1 and
+`c1d671b3b2abf999220bc6fe3cf7b9addc974dc477fdadd594c35652722e4370` for SHA-256.
+The preliminary Phase 4 Compose gate started at 02:23:14 UTC. On
+`cdb32dd`, the Phase 3 regression stopped because its CLI fixture printed
+`GenerationUnavailable` in place of the established `generation unavailable`
+diagnostic. The corrected revision preserves that diagnostic and authorizes
+paths before applying find patterns. The corrected Phase 3 and Phase 4
+Compose runs started at 02:37:25 and 02:42:34 UTC, respectively. The Phase
+0, 1, and 2 runs started at 02:45:43, 02:46:49, and 02:47:20 UTC.
+
+### Rebuilt images and reproduction
+
+The images were built with `docker --context default buildx build --network host
+--platform linux/amd64 --load` and the targets in the existing
+[qualification procedure](exploration.md#qualification).
+
+| Local image | Image ID |
+| --- | --- |
+| gh-docs-phase4-serve | `sha256:5e5c1061fce95d549eda15500ca64da85321c9501c1499baeb82fa10ad0dee6a` |
+| gh-docs-phase3-sync | `sha256:a745e408d248d6178ea1c307a3f29e2b4d12898b8cd1f69dbb053cd9d6767ea8` |
+| gh-docs-phase2-upstream | `sha256:aa958c5b917fb306ca4a803a80ebc76c72be576b180fdf814fbd37d2a2827b06` |
+| gh-docs-mcp-serve | `sha256:ba50019390191cb8e9061b1b28a0905bb710504c2b32f36a58d5f19e663839df` |
+| gh-docs-mcp-sync | `sha256:d5777171e5b7934ef800948ba72cb53749c579770265c5c2aac87c6a6605f026` |
+| gh-docs-mcp-feed | `sha256:d4e095cb2787edde7e5104ec25b636182d763fd76b88c6f6898f58bca7128ea1` |
+| gh-docs-phase1-serve | `sha256:73a29002bf50a8ff8d125d011d6b24642365b6dde8dc55c6ed702bbc27cabdab` |
+| gh-docs-phase1-sync | `sha256:a167874337d1c97f1a0915c4332b84358b87bae2e96aacc41beedbf3db0def28` |
+| gh-docs-phase2-sync | `sha256:f355420d8918fe25600f2ee8aeb986b55aea30ba8b184391fd03879a59cee421` |
+| gh-docs-phase3-serve | `sha256:0f4c12ac740d462e3e57ae56b698eb761132718f290c5cfaf8359f91e95424c6` |
+| Pinned PostgreSQL | `sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f` |
+| Pinned proxy and sink | `sha256:0272e4604ed93c1792f03695a033a6e8546840f86e0de20a884bb17d2c924883` |
+
+~~~sh
+export CARGO_TARGET_DIR=/tmp/rust/target
+scripts/phase0/check-rust.sh
+client_dir=$(scripts/phase0/prepare-client.sh)
+tag=phase4-2eefc311e4d9
+
+sudo -n python3 -B scripts/phase3/integration.py --image-tag "$tag"
+sudo -n python3 -B scripts/phase4/integration.py --image-tag "$tag"
+sudo -n python3 -B scripts/phase0/integration.py --skip-build --image-tag "$tag" \
+  --node "$(command -v node)" --client-dir "$client_dir"
+sudo -n python3 -B scripts/phase1/integration.py --image-tag "$tag" \
+  --node "$(command -v node)" --client-dir "$client_dir"
+sudo -n python3 -B scripts/phase2/integration.py --image-tag "$tag"
+python3 -B scripts/phase4/minikube.py \
+  --serve-image "gh-docs-phase4-serve:$tag" \
+  --sync-image "gh-docs-phase3-sync:$tag" \
+  --upstream-image "gh-docs-phase2-upstream:$tag" \
+  --postgres-image "gh-docs-phase4-postgres:$tag" \
+  --bootstrap-cache "$bootstrap_cache"
+~~~
+
+The final transcripts are in
+`/tmp/gh-docs-phase4-final.LMPsRKXt`, including `rust.log`, `phase0.log`
+through `phase4.log`, `minikube.log`, `cleanup.log`, and the image build logs. The
+preliminary Phase 3 failure is in
+`/tmp/gh-docs-phase4.khQi6fRz/phase3.log`.
+
+Cleanup removed the disposable Compose projects, scoped firewall tables,
+image tags, Minikube profiles, and generated SDK client fixtures. The
+qualification used synthetic sources on local amd64 profiles.
