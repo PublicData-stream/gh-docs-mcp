@@ -244,8 +244,8 @@ def wire_commands(fmt, context, phrase):
     return commands
 
 
-def smoke(args, serve=None, *, explore=False, wire=False, control=None):
-    phase = 6 if control else 5 if wire else 4 if explore else 3 if serve else 2
+def smoke(args, serve=None, *, explore=False, wire=False, control=None, extra_logs=(), phase=None):
+    phase = phase or (6 if control else 5 if wire else 4 if explore else 3 if serve else 2)
     profile = f"ghdocs{phase}-{secrets.token_hex(5)}"
     root = Path(tempfile.mkdtemp(prefix=f"{profile}-minikube-", dir="/tmp"))
     environment = {**os.environ, "MINIKUBE_HOME": str(root), "KUBECONFIG": str(root / "kubeconfig"),
@@ -298,10 +298,13 @@ def smoke(args, serve=None, *, explore=False, wire=False, control=None):
             diagnostic = ("unpack", "postgres", "upstream", "registration")
             if control:
                 diagnostic += ("schedule", "serve", "sync", "feed")
-            for name in diagnostic:
+            for name in (*diagnostic, *extra_logs):
                 execute([*scope, "logs", "job/private-fetch", "-c", name], check=False)
         execute([*scope, "logs", "job/private-fetch", "-c", "control-smoke" if control else "reconcile"],
                 check=wait.returncode == 0)
+        if wait.returncode == 0:
+            for name in extra_logs:
+                execute([*scope, "logs", "job/private-fetch", "-c", name])
         if serve and not control:
             execute([*scope, "logs", "job/private-fetch", "-c", "read"], check=wait.returncode == 0)
         wait.check_returncode()

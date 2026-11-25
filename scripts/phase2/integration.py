@@ -249,11 +249,12 @@ def concurrent_admission(stack, repository, endpoint, upstream):
             time.sleep(0.2)
         else:
             raise RuntimeError("concurrent jobs did not occupy both slots")
-        same = stack.exec("sync", "gh-docs-phase2-fixture", repository, endpoint, CA, expected=None)
-        assert same.returncode and '"reason":"repository_writer"' in same.stdout, same.stdout
+        # Check global admission before the repository fence's timed wait.
         third = stack.exec("sync", "gh-docs-phase2-fixture", "11111111-2222-4333-8444-000000000003", endpoint, CA,
                            expected=None)
         assert third.returncode and '"reason":"global_limit"' in third.stdout, third.stdout
+        same = stack.exec("sync", "gh-docs-phase2-fixture", repository, endpoint, CA, expected=None)
+        assert same.returncode and '"reason":"repository_writer"' in same.stdout, same.stdout
         # Revoke an admitted job while the synthetic endpoint is slow.
         stack.compose("run", "--rm", "--no-deps", "migrate", "--revoke-source", "--source", REPOS["sha256"][1])
         stack.exec("sync", "sh", "-ec",

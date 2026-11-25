@@ -283,6 +283,7 @@ def budgets(wire, repo, proof):
             pids.append(int(wire.stack.exec("serve", "sh", "-ec", command).stdout.strip()))
         assert len(set(pids)) == 2
         wire.call("git.rg", request["arguments"], error="budget_exceeded")
+        cancelled_at = time.monotonic()
         clients[0].sock.shutdown(socket.SHUT_RDWR)
         clients[0].close()
         for _ in range(40):
@@ -292,6 +293,7 @@ def budgets(wire, repo, proof):
             time.sleep(0.1)
         else:
             raise AssertionError("search worker remained after proxy disconnect")
+        print(f"A17 proxy disconnect reaped the held worker in {time.monotonic() - cancelled_at:.3f}s", flush=True)
         response = clients[1].getresponse()
         assert response.status == 200
         timed_out = json.loads(response.read())["result"]
