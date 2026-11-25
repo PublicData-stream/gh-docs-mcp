@@ -26,10 +26,10 @@ def prepare(root):
         proof_path = root / f"{fmt}-oracle.json"
         proof = json.loads(proof_path.read_text())
 
-        def contents(raw, hidden):
+        def contents(raw, hidden, note=b"note"):
             return tree(repo, [
                 dir_entry(repo, b"data", [
-                    file_entry(repo, b"note", raw),
+                    file_entry(repo, note, raw),
                     file_entry(repo, b"same-\xff", raw),
                     file_entry(repo, b"binary", b"\0" + PHRASE.encode() + bytes([hidden])),
                     file_entry(repo, b":(glob)*", b"literal path\r\n"),
@@ -47,9 +47,11 @@ def prepare(root):
         left = revision(contents(NEW, 1), base)
         right = revision(contents(OLD, 2), base)
         head = revision(contents(NEW, 2), left, right)
+        renamed = revision(contents(NEW, 2, b"renamed"), head)
+        git(repo, "update-ref", "refs/heads/approved/rename", renamed)
         git(repo, "update-ref", "refs/heads/main", head)
         git(repo, "tag", "-fa", "v1", head, "-m", "Phase 5 source")
-        proof.update(base=base, left=left, right=right, head=head)
+        proof.update(base=base, left=left, right=right, head=head, renamed=renamed)
         if fmt == "sha1":
             corpus = [file_entry(repo, f"{i:03d}".encode(), b"nonmatching line\n") for i in range(34)]
             corpus.append(file_entry(repo, b"last", b"needle\n"))
@@ -61,5 +63,7 @@ def prepare(root):
             stress = [file_entry(repo, f"{i:03d}".encode(), large) for i in range(32)]
             slow = revision(tree(repo, [dir_entry(repo, b"stress", stress)]))
             git(repo, "update-ref", "refs/heads/approved/stress", slow)
-            proof.update(partial=partial, slow=slow)
+            oversized = revision(tree(repo, [file_entry(repo, b"oversized", b"x" * (8 * 1024 * 1024 + 1))]))
+            git(repo, "update-ref", "refs/heads/approved/oversized", oversized)
+            proof.update(partial=partial, slow=slow, oversized=oversized)
         proof_path.write_text(json.dumps(proof))

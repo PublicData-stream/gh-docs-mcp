@@ -2,6 +2,7 @@
 
 import argparse
 from base64 import urlsafe_b64decode, urlsafe_b64encode
+from contextlib import closing
 from datetime import datetime, timezone
 import hmac
 import http.client
@@ -54,17 +55,16 @@ class Wire:
         return client
 
     def send(self, method, args, *, status=200, request_id=1, **options):
-        with self.start(method, args, request_id=request_id, **options) as client:
+        with closing(self.start(method, args, request_id=request_id, **options)) as client:
             response = client.getresponse()
             body = response.read()
             assert response.status == status, (response.status, body[:512])
             assert len(body) <= 256 * 1024
             assert response.getheader("Mcp-Session-Id") is None
-            if not body:
+            if status != 200 or not body:
                 return {}
             result = json.loads(body)
-            if status == 200:
-                assert result["id"] == request_id
+            assert result["id"] == request_id
             return result
 
     def call(self, name, arguments, *, error=None, validate=True, request_id=1):
@@ -165,6 +165,7 @@ def search(wire, ctx):
     assert first["coverage"]["omitted"]["binary"] == 1
     wire.call("git.rg", {"context": ctx, "pattern": "["}, error="invalid_regex")
     wire.call("git.rg", {"context": ctx, "pattern": "(?=a)"}, error="invalid_regex")
+    wire.call("git.rg", {"context": ctx, "pattern": ".{1000000}"}, error="invalid_regex")
     wire.call("git.rg", {**args, "pattern": "different", "page": {"limit": 1, "cursor": token}}, error="cursor_invalid")
     wire.call("git.rg", {**args, "page": {"limit": 1, "cursor": ("A" if token[0] != "A" else "B") + token[1:]}}, error="cursor_invalid")
     signed = urlsafe_b64decode(token + "=" * (-len(token) % 4))
@@ -213,10 +214,17 @@ def history(wire, repo, ctx, proof, git_repo, fmt):
     observed = [entry["origin"]["commit"]["oid"] for entry in blame["entries"] + last["entries"]]
     expected = [line.split()[0].decode() for line in git(git_repo, "blame", "--first-parent", "--root",
                 "--line-porcelain", ctx["commit_oid"], "--", PATH).splitlines()
-                if len(line.split()) == 4 and len(line.split()[0]) == len(ctx["commit_oid"])
-                and line.split()[1].isdigit()]
+                if len(line.split()) in (3, 4) and len(line.split()[0]) == len(ctx["commit_oid"])
+                and all(field.isdigit() for field in line.split()[1:])]
     assert observed == expected == [proof["left"], proof["base"], proof["base"]]
     assert wire.call("git.show", {"context": ctx, "path": encoded(b"data/:(glob)*")})["entries"] == []
+    renamed = wire.resolve(repo, proof["renamed"])
+    attribution = wire.call("git.blame", {"context": renamed, "path": encoded("data/renamed")})
+    assert all(entry["origin"]["commit"]["oid"] == proof["renamed"] for entry in attribution["entries"])
+    rename_changes = wire.call("git.diff", {"base": ctx, "head": renamed})["entries"]
+    assert [(decoded(change["path"]), change["old"] is None, change["new"] is None) for change in rename_changes] == [
+        (b"data/note", False, True), (b"data/renamed", True, False),
+    ]
     wire.call("git.show", {"context": ctx, "parent": 99}, error="invalid_argument")
     wire.call("git.diff", {"base": {**base, "generation_id": "999"}, "head": ctx}, error="invalid_argument")
     wire.call("git.log", {"context": {**ctx, "commit_oid": proof["hidden"]}}, error="object_unavailable")
@@ -233,12 +241,25 @@ def budgets(wire, repo, proof):
     assert not first["scan_complete"] and not first["matches"] and first["next_cursor"]
     second = wire.call("git.rg", {**args, "page": {"cursor": first["next_cursor"]}})
     assert second["scan_complete"] and [decoded(hit["path"]) for hit in second["matches"]] == [b"corpus/last"]
+    oversized = wire.resolve(repo, proof["oversized"])
+    skipped = wire.call("git.rg", {"context": oversized, "pattern": "needle"})
+    assert not skipped["scan_complete"] and skipped["coverage"]["omitted"]["oversized_blob"] == 1
+    assert skipped["matches"] == [] and skipped["next_cursor"] is None
     ctx = wire.resolve(repo)
     escaped = {"context": ctx, "path": encoded("data/wide")}
-    small = wire.call("git.read", escaped, request_id="\u0001" * 2000)
-    assert small["next_cursor"] and len(small["data"]) < 32768
-    other = wire.call("git.read", {**escaped, "cursor": small["next_cursor"]})
-    assert small["data"] + other["data"] == "\u0001" * 32768
+    chunks = []
+    cursor = None
+    offset = 0
+    for _ in range(10):
+        page = wire.call("git.read", {**escaped, "cursor": cursor}, request_id="\u0001" * 2000)
+        assert page["returned_range"]["start"] == offset
+        offset = page["returned_range"]["end"]
+        chunks.append(page["data"])
+        cursor = page["next_cursor"]
+        if cursor is None:
+            break
+    assert 1 < len(chunks) < 10 and cursor is None
+    assert "".join(chunks) == "\u0001" * 32768
     proof_command = wire.stack.exec("serve", "gh-docs-search-worker", "--probe-denials")
     assert "inherited descriptors and denial controls passed" in proof_command.stdout
     assert wire.stack.exec("serve", "gh-docs-search-worker", "--fail-setup").stdout == "-"
@@ -330,7 +351,9 @@ def main():
             stack, upstream, config, endpoint):
         wire = Wire(stack)
         wire.validate_registry()
+        print("A01/A13 normal MCP registry, schemas and proxy boundaries passed", flush=True)
         migration_and_legacy(wire, config, endpoint)
+        print("A14 catalog migration, legacy output and policy supersession passed", flush=True)
         publish(stack, config, endpoint, "sha256")
         for fmt, (repo, _) in REPOS.items():
             proof = json.loads((upstream / f"{fmt}-oracle.json").read_text())
@@ -338,16 +361,20 @@ def main():
             assert ctx["commit_oid"] == proof["head"]
             token = search(wire, ctx)
             history(wire, repo, ctx, proof, repo_path(upstream, fmt), fmt)
+            print(f"A15/A16 {fmt} search and history oracles passed", flush=True)
             if fmt == "sha1":
                 budgets(wire, repo, proof)
+                print("A17 coverage, wire cap, confinement, overload and teardown passed", flush=True)
                 sdk(wire, args.node, args.client_dir, repo)
                 retirement(wire, upstream, endpoint, ctx, token)
+                print("A13 retained cursor and retirement denial passed", flush=True)
             else:
                 stack.compose("run", "--rm", "--no-deps", "migrate", "--revoke-source",
                               "--source", REPOS[fmt][1])
                 wire.call("git.rg", {"context": ctx, "pattern": PHRASE, "literal": True, "context_lines": 1,
                           "page": {"limit": 1, "cursor": token}}, error="generation_unavailable")
                 wire.call("git.log", {"context": ctx}, error="generation_unavailable")
+                print("A14 revoked search cursor and history denied", flush=True)
     print("Phase 5 Compose qualification passed", flush=True)
 
 
