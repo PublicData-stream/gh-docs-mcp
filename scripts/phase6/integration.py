@@ -198,11 +198,11 @@ def rotation(stack):
     previous_key.write_bytes(old)
     previous_key.chmod(0o400)
     os.chown(previous_key, 10001, 10001)
-    expires = int(time.time()) + 15
+    expires = int(time.time()) + 30
     stack.context.update(GH_DOCS_SYNC_SERVE_KEY_ID="v2", GH_DOCS_SYNC_SERVE_PREVIOUS_KEY_ID="v1",
                          GH_DOCS_SYNC_SERVE_PREVIOUS_KEY_FILE="/run/secrets/sync-serve.previous.key",
                          GH_DOCS_SYNC_SERVE_PREVIOUS_KEY_EXPIRES=str(expires))
-    stack.compose("up", "--no-build", "--pull", "never", "--force-recreate", "--no-deps", "serve")
+    stack.compose("up", "-d", "--no-build", "--pull", "never", "--force-recreate", "--no-deps", "serve")
     ready(stack, "serve")
     old_sender = Link(stack, "sync", key=old, key_id="v1")
     new_sender = Link(stack, "sync", key=new, key_id="v2")
@@ -214,7 +214,7 @@ def rotation(stack):
     previous_key.unlink()
     for suffix in ("KEY_ID", "PREVIOUS_KEY_ID", "PREVIOUS_KEY_FILE", "PREVIOUS_KEY_EXPIRES"):
         stack.context.pop("GH_DOCS_SYNC_SERVE_" + suffix)
-    stack.compose("up", "--no-build", "--pull", "never", "--force-recreate", "--no-deps", "serve")
+    stack.compose("up", "-d", "--no-build", "--pull", "never", "--force-recreate", "--no-deps", "serve")
     print("A18 receiver-first rotation and previous-key expiry passed", flush=True)
 
 
@@ -241,7 +241,8 @@ def protocol(stack, link):
     stack.exec("feed", "sh", "-ec",
                "test ! -e /git-store && test ! -e /git-sync-private && test ! -e /run/secrets/db-password "
                "&& test ! -e /run/secrets/sync-serve.key && test ! -e /run/secrets/cursor.key")
-    assert not link.raw(b"", address=stack.env["PG_READ_IP"], port=5432)
+    # A reachable PostgreSQL server answers the standard SSL negotiation byte.
+    assert not link.raw(bytes.fromhex("0000000804d2162f"), address=stack.env["PG_READ_IP"], port=5432)
     client = http.client.HTTPSConnection("127.0.0.1", int(stack.env["PROXY_PORT"]),
                                          context=previous.Wire(stack).ssl, timeout=5)
     try:

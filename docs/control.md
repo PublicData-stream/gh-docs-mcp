@@ -35,7 +35,9 @@ private links and separate `--feed-resolver` and `--feed-https` allowlists.
 Keep the DB listeners, sync port 8783, serve notification port 8784, and
 loopback health listeners off published ports and outside the MCP proxy.
 The qualified single-host profile uses private HTTP/1.1 with HMAC.
-Use TLS for control links before any cross-host deployment.
+Use TLS for control links before any cross-host deployment. Keep Compose's
+`init: true` for sync so its Git workers can distinguish their daemon parent
+from an orphan reparented to PID 1.
 
 ## Queue, ownership, and rollback
 

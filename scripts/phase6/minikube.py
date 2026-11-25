@@ -57,7 +57,13 @@ def phase6(root, args):
                  startupProbe={"exec": {"command": ready(8081)}, "periodSeconds": 1, "failureThreshold": 35})
     add_env(serve, GH_DOCS_CONTROL_ENABLED="1", GH_DOCS_SERVE_NOTIFY_BIND="127.0.0.1:8784",
             GH_DOCS_SYNC_SERVE_KEY_ID="v1", GH_DOCS_SYNC_SERVE_KEY_FILE="/run/secrets/sync-serve.key")
-    sync.update(name="sync", command=["gh-docs-sync"], restartPolicy="Always",
+    # Compose supplies an init process. Keep the daemon below PID 1 here as
+    # well so the existing Git parent-death check can detect an orphan.
+    supervise = """gh-docs-sync & child=$!
+trap 'kill -TERM "$child"; wait "$child" || true' TERM INT
+wait "$child"
+"""
+    sync.update(name="sync", command=["/bin/sh", "-ec", supervise], restartPolicy="Always",
                 startupProbe={"exec": {"command": ready(8082)}, "periodSeconds": 1, "failureThreshold": 35})
     sync["volumeMounts"].append(mount("configuration", "/fixtures", True))
     add_env(sync, HEALTH_BIND="127.0.0.1:8082", GH_DOCS_CONTROL_ENABLED="1",
