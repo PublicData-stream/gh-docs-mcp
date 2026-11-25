@@ -776,3 +776,126 @@ Minikube home, or `ghdocs` nftables tables. The 41 local Phase 7 image
 tags, generated source archives,
 Cargo seed, advisory checkout, and prepared SDK fixture were removed.
 Receipt files and scanner output remain under `/tmp` for review.
+
+## Phase 8 release qualification
+
+**Release decision: no-go.** The declared profile is private synthetic
+rootful Compose with OxiBelt on native Linux amd64 and arm64. The local
+qualification host on 2026-11-25 UTC was Linux amd64, kernel
+`7.0.0-44-generic`, with ext4-backed `/tmp`, Docker `29.10.1`, Compose
+`5.8.0`, and Buildx `0.39.1`. Rust was `1.100.0`, Git in the images was
+`2.54.1`, ripgrep was `16.0.0`, and the pinned TypeScript client runtime
+used Node `26.13.1` and pnpm `12.21.0`.
+
+### Supply chain
+
+The native OCI export from signed runtime revision `1bd21e1` was imported
+into a disposable loopback registry with preserved digests. Each runnable
+descriptor matched the subject of its SPDX SBOM and SLSA provenance.
+Independent builders produced identical runnable manifest digests for
+all three roles. At `11e39a4`, the repeated sync build differed. Revision
+`88d6948` switched to the CA bundle already present at the pinned version
+in the Alpine base and passed the repeat check. Registry-only inspection
+confirmed that the pinned arm64 base contains that CA package.
+
+| Role | Native amd64 manifest |
+| --- | --- |
+| Serve | `sha256:c6066f0b4bf10de7094dfd6347cb04489e0b3e8a1fbfdd46b56fc37b75160e14` |
+| Sync | `sha256:9773b6d54a24cfb625e9fffee05617723a46b3c380600faead165551e03cea3e` |
+| Feed | `sha256:ac1a8f945cbd098dae6c95cd2ec41f9c5be5d8f2fec274108762150056792b2a` |
+
+The exact amd64 image audit used Trivy `0.76.2` and its database updated
+`2026-11-25T07:11:44Z`. Serve, sync, feed, and the Alpine initializer each
+had seven medium and four low findings. PostgreSQL had one critical,
+26 high, 31 medium, three low, and one unknown finding. The critical
+match was `CVE-2025-68121` in the Go standard library bundled with
+`gosu`. The PostgreSQL role starts as UID 70 and skips that root-only
+branch. The official `19.0-alpine3.24` tag still resolved to the tested
+index `sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f`.
+Disposition of these findings remains open.
+
+RustSec database revision `87025f60dbbb1f8820c2bd068cee9140244d4dc9` reported
+zero matches in the workspace and pinned ripgrep lockfiles. The workspace
+retains the unmaintained `chrono` warning. The shell-free OxiBelt image
+produced an empty local package scan. GitHub verified the OxiBelt index
+provenance and the native amd64 CycloneDX SBOM at source revision
+`e879ac7e263b0af9a86280cd8799de44cbffc05c`. The signed SBOM identified
+the proxy binary. The source lockfile audit reported 16 advisory matches.
+That workspace lockfile spans multiple builds, so runtime disposition
+requires review against the selected data plane and its enabled features.
+The available stable OxiBelt tag was `0.10.0`. The audit command collected
+all reports and exited 1 on the disposition gate. It listed 27 PostgreSQL
+findings and an open OxiBelt lockfile item.
+
+### Qualification evidence
+
+Reproduction commands are in the [Phase 8 runbook](release-readiness.md).
+Local receipts are under `/tmp/gh-docs-phase8.QFa4k9qY`. Native ARM64 and
+multi-platform assembly require the authorized hosted workflow.
+The synthetic TypeScript SDK and wire probes are the declared client scope.
+A real-source live smoke, public deployment, product clients, and
+power-loss durability require separate qualification.
+
+The locked Rust gate passed on the runtime with the trusted-proxy adapter.
+The original Phase 0 run expired during PostgreSQL initialization. The
+retry with the startup grace period passed, as did the targeted Phase 0 and
+5 rechecks on the exact release manifests. Each of the Phase 0–7 Compose
+probes passed on the local amd64 host. The first Minikube run exceeded
+the 180-second image import timeout. The isolated rootless retry with
+the 420-second import bound passed on Minikube `1.39.0` and Kubernetes
+`1.37.0`, including feed-to-MCP publication and Landlock/seccomp probes.
+The disposable profile and its temporary home were removed.
+
+The first OxiBelt wire probe exposed an upstream HTTP protocol mismatch.
+The HTTP/1.1 backend pin resolved that error. The edge still normalized
+`Host` to the hostname and carried the effective port in
+`X-Forwarded-Port`. The release listener now validates its actual
+OxiBelt peer and reconstructs the configured authority only after the
+normalized hostname, TLS scheme and forwarded port match. The exact
+release images passed verified TLS, HTTP/1.1 and HTTP/2 discovery, the
+forwarded-header and private route checks, and the pinned SDK.
+
+### Acceptance matrix
+
+| Gate | Native amd64 local evidence | Native arm64 |
+| --- | --- | --- |
+| A01–A04 | Pass. Phase 0 and the release edge exercised pinned discovery, SQL grants and TLS, role and egress isolation, and worker confinement. | Not run |
+| A05–A06 | Pass. Phase 1 and 4 exercised native identity, migration and raw byte/path oracles. | Not run |
+| A07–A08 | Pass. Phase 2 and 3 exercised approved synthetic acquisition, private staging and candidate validation. | Not run |
+| A09–A11 | Pass. Phase 3 exercised interrupted publication, reader and writer fences, retained history and retirement. | Not run |
+| A12–A14 | Pass. Phase 4 and 5 exercised scoped visibility, cursors and policy revocation. | Not run |
+| A15–A17 | Pass. Phase 5 exercised the search/history oracles, bounded results, overload and worker reap. | Not run |
+| A18–A19 | Pass. Phase 6 exercised authenticated control, scheduling and durable outbox recovery. | Not run |
+| A20–A21 | Pass for the synthetic workload. Phase 7 and the release drill exercised limits and bounded resource use. | Not run |
+| A22 | Pass. Fenced capture, independent restore, corruption denial and repair, coordinated restart, and matched rollback all completed. | Not run |
+| A23 | Fail on audit disposition. Local digest, platform, SBOM/provenance and exact proxy checks passed. | Not run |
+| A24 | Private runbooks are present. The public source, exposure, privacy, retention and limits review remains open. | Not run |
+
+During the uncoordinated restart attempt, OxiBelt returned a `502` on the
+first read after serve restarted. The runbook closes the edge for a
+planned serve restart and starts a fresh proxy after the service is healthy.
+The coordinated rerun used qualification revision `2bcfd49` with runtime
+`1bd21e1`. It restored active, retained and ready generations in both
+object formats after removing the source volumes. It checked the exact
+raw bytes and history, rotated cursors, recovered interrupted publication,
+rejected damaged backups, and blocked a damaged restored repository until
+verified repair. The sequence-checked rollback delivered its outbox event
+and kept the retained bytes through GC and restart. A separate fresh
+restore passed with the Phase 7 images and matching Nginx profile.
+
+The bundle contained 186,155 bytes. Capture took 1.071 s and restore with
+verification took 18.712 s, including 0.075 s for the initial digest and
+inventory check. The first post-eviction search took 41.75 ms with zero
+of eight pack pages resident. Twelve warm samples ranged from 40.76 to
+42.94 ms. The eight-call burst returned six bounded admission denials and
+the next regular request succeeded. Peak sampled aggregate serve process
+RSS was 36,644 KiB. These measurements describe the synthetic fixture and
+local host.
+
+The key receipts are `oci-1bd21e1/receipt.json`, `restore-final.json`,
+`restore-coordinated.log`, `regressions/`, `minikube-retry.log`, and
+`audit-final/disposition.json`. The scoped cleanup removed 23 temporary
+image tags and the SDK fixture. The cleanup receipt lists no remaining
+Phase 8 projects, builders, Minikube profiles or firewall tables.
+The release decision remains no-go while
+both the audit disposition and native arm64 qualification are open.
