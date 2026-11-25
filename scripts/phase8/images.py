@@ -70,7 +70,10 @@ def descriptors(layout):
 
 
 def inspect(layout, arch):
-    entries = descriptors(layout)
+    return inspect_entries(layout, arch, descriptors(layout))
+
+
+def inspect_entries(layout, arch, entries, *, labels=None):
     runtime, = (item for item in entries if item.get("platform", {}).get("os") == "linux"
                 and item["platform"]["architecture"] == arch)
     runtime_digest = runtime["digest"]
@@ -82,6 +85,8 @@ def inspect(layout, arch):
         if item is runtime:
             if config.get("architecture") != arch or config.get("os") != "linux":
                 raise ValueError("runtime config differs from its platform descriptor")
+            if labels and any(config["config"]["Labels"].get(key) != value for key, value in labels.items()):
+                raise ValueError("runtime config differs from the release labels")
         elif (annotations.get("vnd.docker.reference.type") != "attestation-manifest"
               or annotations.get("vnd.docker.reference.digest") != runtime_digest):
             raise ValueError("unexpected descriptor in native image bundle")
@@ -92,9 +97,11 @@ def inspect(layout, arch):
             kind = layer.get("annotations", {}).get("in-toto.io/predicate-type")
             if item is not runtime and kind:
                 statement = json.loads(path.read_bytes())
-                if not any(subject.get("digest", {}).get("sha256") == runtime_digest[7:]
-                           for subject in statement["subject"]):
-                    raise ValueError("attestation subject differs from the runtime manifest")
+                if statement["predicateType"] != kind or not any(
+                    subject.get("digest", {}).get("sha256") == runtime_digest[7:]
+                    for subject in statement["subject"]
+                ):
+                    raise ValueError("attestation predicate or subject differs from its descriptor")
                 attestations.add(kind)
     if "https://spdx.dev/Document" not in attestations or not (
         {"https://slsa.dev/provenance/v1", "https://slsa.dev/provenance/v0.2"} & attestations

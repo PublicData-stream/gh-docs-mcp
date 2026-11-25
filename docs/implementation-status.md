@@ -899,3 +899,38 @@ image tags and the SDK fixture. The cleanup receipt lists no remaining
 Phase 8 projects, builders, Minikube profiles or firewall tables.
 The release decision remains no-go while
 both the audit disposition and native arm64 qualification are open.
+
+### GHCR publishing workflow
+
+The signed stable and beta release workflow uses the Phase 8 native gate
+for both platforms. The full audit still gates assembly and publication.
+`actionlint`, the locked offline Rust gate, and the release regression
+suite passed. The source checker also accepted the existing canonical
+`main` push CI at `40db6c8` through the GitHub API. The disposable registry
+test simulated first-package discovery and exercised digest-only bootstrap,
+fixed version tags, recovery after partial writes, digest conflicts,
+anonymous downloads of two synthetic platforms with attestations, and
+stable `:latest` promotion without downgrades.
+
+The local native amd64 build used `d422f73` and the test version
+`0.1.0-beta.1`. The first independent build timed out reading the Cargo
+index inside BuildKit. A repeat build with the locked cache staged under
+`/tmp` reproduced all three runnable digests and verified the release
+labels and attestation subjects. Phases 0–7 passed under rootful Compose
+with synthetic fixtures. Phase 1 passed after rerunning with lowercase
+aliases for the same fixture images.
+
+The exact-image Phase 8 restore and matched rollback rehearsal passed.
+The supplemental rootless Minikube smoke passed on Minikube 1.39.0 and
+Kubernetes 1.37.0. Cleanup removed the disposable cluster, fixture image
+tags, OCI layouts, and local Cargo seed. No scoped Compose resources or
+nftables tables remained.
+
+The exact-image audit exited at the disposition gate. Trivy 0.76.2
+with its database updated at 13:07 UTC on 2026-11-25 reported 27
+critical or high PostgreSQL findings. RustSec revision `b9b8a3c2`
+reported 17 OxiBelt workspace lockfile matches and zero workspace or
+ripgrep matches. Verification of the pinned OxiBelt provenance and
+native SBOM succeeded. The audit could not resolve the yank status of
+some OxiBelt dependencies from the local crates.io cache.
+Native arm64 qualification and live GHCR verification remain open.

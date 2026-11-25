@@ -1,0 +1,190 @@
+name: Publish GH Docs MCP images
+
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+concurrency:
+  group: gh-docs-mcp-ghcr-${{ github.ref }}
+  queue: max
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  TMPDIR: /tmp
+
+jobs:
+  source:
+    name: Verify signed source and canonical CI
+    if: github.repository == 'PublicData-stream/gh-docs-mcp'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      checks: read
+      contents: read
+    outputs:
+      version: ${{ steps.source.outputs.version }}
+      revision: ${{ steps.source.outputs.revision }}
+      kind: ${{ steps.source.outputs.kind }}
+      tag-object: ${{ steps.source.outputs.tag_object }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify the release
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 -B scripts/phase8/release_source.py
+
+  qualify:
+    name: Qualify and assemble the native OCI archives
+    needs: source
+    permissions:
+      attestations: read
+      contents: read
+    uses: ./.github/workflows/release-candidate.yml
+    with:
+      revision: ${{ needs.source.outputs.revision }}
+      version: ${{ needs.source.outputs.version }}
+
+  publish:
+    name: Publish the three versioned OCI indexes
+    needs: [source, qualify]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
+    env:
+      RELEASE_VERSION: ${{ needs.source.outputs.version }}
+      RELEASE_REVISION: ${{ needs.source.outputs.revision }}
+      RELEASE_TAG_OBJECT: ${{ needs.source.outputs.tag-object }}
+    outputs:
+      receipt-id: ${{ steps.receipt.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.revision }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.qualify.outputs.artifact-id }}
+          path: /tmp/ghdocs-release-bundle
+      - name: Provide the registry client
+        run: |
+          if ! command -v skopeo >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install --no-install-recommends -y skopeo
+          fi
+      - name: Recheck the tag and publish with the workflow token
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -B scripts/phase8/release_source.py recheck
+          umask 077
+          authfile=$(mktemp /tmp/ghdocs-ghcr.XXXXXXXX)
+          trap 'rm -f -- "$authfile"' EXIT
+          printf '{}\n' > "$authfile"
+          printf '%s' "$GH_TOKEN" | skopeo login --authfile "$authfile" \
+            --username "$GITHUB_ACTOR" --password-stdin ghcr.io
+          unset GH_TOKEN
+          python3 -B scripts/phase8/publish.py --version "$RELEASE_VERSION" --revision "$RELEASE_REVISION" \
+            publish --authfile "$authfile" --bundle /tmp/ghdocs-release-bundle \
+            --receipt /tmp/ghcr-release-digests.json
+          {
+            echo 'Compose image references'
+            echo '~~~'
+            jq -r '.images | to_entries[] | "GH_DOCS_\(.key | ascii_upcase)_IMAGE=\(.value.image)@\(.value.index)"' \
+              /tmp/ghcr-release-digests.json
+            echo '~~~'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        id: receipt
+        with:
+          name: ghcr-release-digests-${{ github.run_attempt }}
+          path: /tmp/ghcr-release-digests.json
+          if-no-files-found: error
+          retention-days: 90
+
+  verify:
+    name: Verify anonymous downloads for both platforms
+    needs: [source, publish]
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+    env:
+      RELEASE_VERSION: ${{ needs.source.outputs.version }}
+      RELEASE_REVISION: ${{ needs.source.outputs.revision }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.revision }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.publish.outputs.receipt-id }}
+          path: /tmp/ghdocs-release-digests
+      - name: Provide the registry client
+        run: |
+          if ! command -v skopeo >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install --no-install-recommends -y skopeo
+          fi
+      - name: Download and validate the published OCI indexes
+        run: |
+          python3 -B scripts/phase8/publish.py --version "$RELEASE_VERSION" --revision "$RELEASE_REVISION" \
+            verify-anonymous --receipt /tmp/ghdocs-release-digests/ghcr-release-digests.json
+
+  promote-latest:
+    name: Promote verified stable indexes to latest
+    needs: [source, publish, verify]
+    if: needs.source.outputs.kind == 'stable'
+    runs-on: ubuntu-26.04
+    timeout-minutes: 15
+    concurrency:
+      group: gh-docs-mcp-ghcr-latest
+      queue: max
+    permissions:
+      contents: read
+      packages: write
+    env:
+      RELEASE_VERSION: ${{ needs.source.outputs.version }}
+      RELEASE_REVISION: ${{ needs.source.outputs.revision }}
+      RELEASE_TAG_OBJECT: ${{ needs.source.outputs.tag-object }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.source.outputs.revision }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          artifact-ids: ${{ needs.publish.outputs.receipt-id }}
+          path: /tmp/ghdocs-release-digests
+      - name: Provide the registry client
+        run: |
+          if ! command -v skopeo >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install --no-install-recommends -y skopeo
+          fi
+      - name: Recheck the tag and promote the stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -B scripts/phase8/release_source.py recheck
+          umask 077
+          authfile=$(mktemp /tmp/ghdocs-ghcr.XXXXXXXX)
+          trap 'rm -f -- "$authfile"' EXIT
+          printf '{}\n' > "$authfile"
+          printf '%s' "$GH_TOKEN" | skopeo login --authfile "$authfile" \
+            --username "$GITHUB_ACTOR" --password-stdin ghcr.io
+          unset GH_TOKEN
+          python3 -B scripts/phase8/publish.py --version "$RELEASE_VERSION" --revision "$RELEASE_REVISION" \
+            promote-latest --authfile "$authfile" --receipt /tmp/ghdocs-release-digests/ghcr-release-digests.json
