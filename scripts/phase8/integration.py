@@ -35,26 +35,37 @@ phase3, phase2 = phase5.phase4.phase3, phase5.phase2
 phase0 = phase2.phase0
 BASE = ROOT / "compose.yml"
 RELEASE = ROOT / "deploy/compose.release.yml"
+spec = importlib.util.spec_from_file_location("phase7_capacity", ROOT / "scripts/phase7/capacity.py")
+capacity = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(capacity)
 
 
 @contextmanager
-def release_stack(tag, refs):
+def release_stack(tag, refs, *, previous=False):
     name = f"ghdocs8-{secrets.token_hex(5)}"
     table = name.replace("-", "_")
     root = Path(tempfile.mkdtemp(prefix=f"{name}-", dir="/tmp"))
     stack = phase0.Stack(root, name, tag)
-    stack.mcp_host = "localhost"
-    stack.compose_command[6:6] = ["-f", str(RELEASE)]
     stack.context.update({f"GH_DOCS_{role.upper()}_IMAGE": ref for role, ref in refs.items()})
-    stack.context.update(GH_DOCS_MCP_AUTHORITY=f"localhost:{stack.env['PROXY_PORT']}",
-                         EXPLORATION_CURSOR_KEY_ID="restore-v2", GH_DOCS_CONTROL_ENABLED="1")
-    project = backup.Project(name, [BASE, RELEASE], stack.context)
-    certificate = root / "proxy"
-    os.chown(certificate, 10001, 10001)
-    phase0.fixtures.cert(certificate, "localhost", "DNS:localhost", 10001)
-    (certificate / "oxibelt.toml").write_text(edge.render(
-        "localhost", stack.env["PROXY_IP"], stack.env["SERVE_INGRESS_IP"],
-    ))
+    stack.context.update(EXPLORATION_CURSOR_KEY_ID="restore-v2", GH_DOCS_CONTROL_ENABLED="1")
+    overlay = RELEASE
+    if previous:
+        # Reapply the pre-upgrade proxy profile with its matching runtime.
+        overlay = root / "previous.json"
+        roles = {role: {"image": ref} for role, ref in refs.items()}
+        roles["migrate"] = {"image": refs["sync"]}
+        overlay.write_text(json.dumps({"services": roles}))
+    else:
+        stack.mcp_host = "localhost"
+        stack.context["GH_DOCS_MCP_AUTHORITY"] = f"localhost:{stack.env['PROXY_PORT']}"
+        certificate = root / "proxy"
+        os.chown(certificate, 10001, 10001)
+        phase0.fixtures.cert(certificate, "localhost", "DNS:localhost", 10001)
+        (certificate / "oxibelt.toml").write_text(edge.render(
+            "localhost", stack.env["PROXY_IP"], stack.env["SERVE_INGRESS_IP"],
+        ))
+    stack.compose_command[6:6] = ["-f", str(overlay)]
+    project = backup.Project(name, [BASE, overlay], stack.context)
     for child in (root / "store").iterdir():
         if child.is_dir():
             shutil.rmtree(child)
@@ -90,12 +101,14 @@ def open_stack(stack):
         try:
             with socket.create_connection(("127.0.0.1", int(stack.env["PROXY_PORT"])), timeout=2) as client:
                 with ssl.create_default_context(cafile=stack.root / "ca.crt").wrap_socket(
-                    client, server_hostname="localhost"
+                    client, server_hostname=getattr(stack, "mcp_host", "127.0.0.1")
                 ):
                     return True
         except OSError:
             return False
-    phase3.wait_until(tls, "OxiBelt TLS did not start", seconds=25)
+    phase3.wait_until(tls, "proxy TLS did not start", seconds=25)
+    if not hasattr(stack, "mcp_host"):
+        return
     pid = int(phase0.run([*phase0.DOCKER, "inspect", "--format", "{{.State.Pid}}",
                           stack.ids["proxy"]]).stdout)
     assert pid > 0
@@ -110,16 +123,26 @@ def proxy_probes(wire):
     authority = f"{wire.host}:{wire.port}"
     wire.send("tools/list", {}, changes={"Origin": "https://" + authority})
     discover = phase5.message("server/discover")
+    headers = ["-H", "Content-Type: application/json", "-H", "Accept: application/json, text/event-stream",
+               "-H", f"MCP-Protocol-Version: {phase5.VERSION}", "-H", "Mcp-Method: server/discover"]
     h2 = phase0.run([
         "curl", "--noproxy", "*", "--http2", "--fail", "--silent", "--show-error", "--max-time", "10",
-        "--cacert", wire.ca, "-H", "Content-Type: application/json",
-        "-H", "Accept: application/json, text/event-stream",
-        "-H", f"MCP-Protocol-Version: {phase5.VERSION}", "-H", "Mcp-Method: server/discover",
+        "--cacert", wire.ca, *headers,
         "--data-binary", json.dumps(discover), "--write-out", "\n%{http_version}",
         f"https://{authority}/mcp",
     ]).stdout
     body, version = h2.rsplit("\n", 1)
     assert version == "2" and json.loads(body)["result"]["supportedVersions"] == [phase5.VERSION]
+    pid = int(phase0.run([*phase0.DOCKER, "inspect", "--format", "{{.State.Pid}}",
+                          wire.stack.ids["serve"]]).stdout)
+    direct = phase0.run([
+        "nsenter", "--target", str(pid), "--net", "curl", "--noproxy", "*", "--silent",
+        "--show-error", "--max-time", "5", "--output", "/dev/null", "--write-out", "%{http_code}",
+        *headers, "-H", f"Host: {wire.host}", "-H", f"X-Forwarded-Port: {wire.port}",
+        "-H", "X-Forwarded-Proto: https", "--data-binary", json.dumps(discover),
+        f"http://{wire.stack.env['SERVE_INGRESS_IP']}:8080/mcp",
+    ]).stdout
+    assert direct == "403", direct
     wire.send("tools/list", {}, changes={
         "Forwarded": "host=other.invalid", "X-Forwarded-Host": "other.invalid",
         "X-Forwarded-Port": "1", "X-Forwarded-Proto": "http",
@@ -240,25 +263,41 @@ def reject_damaged_backup(bundle, digest):
 
 
 def load(wire, records):
-    repo = next(iter(records))
+    repo = phase5.REPOS["sha1"][0]
     context = records[repo][6]["context"]
-    def observe(_):
+    stress = wire.call("git.resolve", {
+        "repository_id": repo, "generation_id": str(records[repo][0]),
+        "selector": phase5.phase4.ref("refs/heads/approved/stress"),
+    })["context"]
+
+    def observe(selected, pattern):
         started = time.monotonic()
         result = wire.send("tools/call", {"name": "git.rg", "arguments": {
-            "context": context, "pattern": phase5.PHRASE, "literal": True,
+            "context": selected, "pattern": pattern, "literal": True,
         }})["result"]
         return time.monotonic() - started, result["structuredContent"].get("code")
-    cold = observe(0)
-    assert cold[1] is None
-    warm = [observe(i) for i in range(12)]
-    assert all(result is None for _, result in warm)
-    with ThreadPoolExecutor(max_workers=8) as pool:
-        burst = list(pool.map(observe, range(8)))
+
+    group = capacity.cgroup(wire.stack, "serve")
+    before = capacity.snapshot(group)
+    packs = (wire.stack.root / "store/repositories" / repo / "objects/pack").glob("*.pack")
+    residency = [capacity.residency(pack) for pack in packs]
+    assert residency
+    with capacity.sample_workers(group) as peak:
+        first = observe(context, phase5.PHRASE)
+        assert first[1] is None
+        warm = [observe(context, phase5.PHRASE) for _ in range(12)]
+        assert all(result is None for _, result in warm)
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            burst = list(pool.map(lambda _: observe(stress, "absent Phase 8 phrase"), range(8)))
     assert all(result in (None, "budget_exceeded") for _, result in burst)
-    assert observe(0)[1] is None
-    return {"first_seconds": cold[0], "warm_seconds": [elapsed for elapsed, _ in warm],
+    denied = sum(result == "budget_exceeded" for _, result in burst)
+    assert denied and observe(context, phase5.PHRASE)[1] is None
+    return {"first_seconds": first[0], "warm_seconds": [elapsed for elapsed, _ in warm],
+            "resident_pack_pages_before_first": sum(resident for resident, _ in residency),
+            "pack_pages": sum(pages for _, pages in residency),
             "burst_seconds": [elapsed for elapsed, _ in burst],
-            "budget_denials": sum(result == "budget_exceeded" for _, result in burst)}
+            "budget_denials": denied, "before": before, "after": capacity.snapshot(group),
+            "sampled_serve_process_peaks": peak}
 
 
 def rehearse(args, refs, work):
@@ -325,12 +364,12 @@ def rehearse(args, refs, work):
             assert wire.resolve(repo)["commit_oid"] == record[6]["context"]["commit_oid"]
     # Restore the same pre-upgrade state under the Phase 7 role binaries.
     previous = {role: f"gh-docs-mcp-{role}:{args.previous_tag}" for role in images.ROLES}
-    with release_stack(args.fixture_tag, previous) as (target, project, _):
+    with release_stack(args.fixture_tag, previous, previous=True) as (target, project, _):
         try:
             backup.restore(project, project.store(), bundle, digest)
             open_stack(target)
             wire = phase5.Wire(target)
-            wire.validate_registry(host_rejection=(403, 404, 421))
+            wire.validate_registry()
             check_readback(wire, records, rotate=True)
         finally:
             target.compose("stop", "proxy", "feed", "serve", "sync")

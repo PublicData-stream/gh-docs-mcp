@@ -85,11 +85,11 @@ the restore before any migration or application start.
 ## Upgrade and rollback
 
 Drain writers and take a verified matching backup. Keep the old role and
-infrastructure digests and the backup digest together. Bring up the new
+infrastructure digests, proxy configuration, and backup digest together. Bring up the new
 database/image combination with ingress closed. Run the migration as the
 migrator, verify schema, grants, filesystem and pinned MCP behavior, and
 start the proxy only after readiness. An image-only rollback is available
 when verified against the current catalog and store format. For an
 incompatible schema or failed store migration, provision fresh volumes and
-restore the matched pre-upgrade backup and previous images. Reconcile
+restore the matched pre-upgrade backup, previous images and proxy configuration. Reconcile
 revocations and credential changes made after the backup before reopening.
