@@ -20,6 +20,8 @@ from backup import sha256
 
 
 ROOT = Path(__file__).resolve().parents[2]
+SOURCE = "https://github.com/PublicData-stream/gh-docs-mcp"
+CANDIDATE_VERSION = "0.1.0-rc.1"
 DOCKER = ("docker", "--context", "default")
 ROLES = ("serve", "sync", "feed")
 ARCHES = ("amd64", "arm64")
@@ -27,6 +29,7 @@ BUILDKIT = "docker.io/moby/buildkit:v0.35.1@sha256:baf6138eb8c37644800c7c913fba0
 REGISTRY = "docker.io/library/registry:3@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df6e55cce80d22deb1de36f1bc3c"
 SBOM = "docker.io/docker/buildkit-syft-scanner:stable-1@sha256:873a7458c3c8ac8e32c7b796c10e1600b07b963d2aa000a72a2d97aaaa2d6315"
 INDEX = "application/vnd.oci.image.index.v1+json"
+VERSION = re.compile(r"(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){2}(?:-(?:beta|rc)\.[1-9][0-9]*)?")
 
 
 def run(*args, **kwargs):
@@ -100,7 +103,7 @@ def inspect(layout, arch):
     return runtime
 
 
-def merge(layouts, destination):
+def merge(layouts, destination, *, annotations=None):
     destination.mkdir()
     blobs = destination / "blobs/sha256"
     blobs.mkdir(parents=True)
@@ -113,6 +116,8 @@ def merge(layouts, destination):
         all_entries.extend(descriptors(layout))
     # The layout root references a real, digest-addressed deployment index.
     contents = {"schemaVersion": 2, "mediaType": INDEX, "manifests": all_entries}
+    if annotations is not None:
+        contents["annotations"] = annotations
     raw = json.dumps(contents, sort_keys=True, separators=(",", ":")).encode()
     digest = "sha256:" + hashlib.sha256(raw).hexdigest()
     blob_path(destination, digest).write_bytes(raw)
@@ -136,7 +141,15 @@ def builder():
         run(*DOCKER, "buildx", "rm", name)
 
 
-def build(destination, revision, seed, repeat):
+def image_labels(revision, version):
+    return {"org.opencontainers.image.source": SOURCE,
+            "org.opencontainers.image.revision": revision,
+            "org.opencontainers.image.version": version}
+
+
+def build(destination, revision, seed, repeat, version=CANDIDATE_VERSION):
+    if len(version) > 128 or not VERSION.fullmatch(version):
+        raise ValueError("invalid OCI image version")
     arch = architecture()
     revision = output("git", "-C", ROOT, "rev-parse", f"{revision}^{{commit}}")
     epoch = output("git", "-C", ROOT, "show", "-s", "--format=%ct", revision)
@@ -150,26 +163,23 @@ def build(destination, revision, seed, repeat):
         source.mkdir()
         with tarfile.open(archive) as data:
             data.extractall(source, filter="data")
-        inputs = {
-            "source": "https://github.com/PublicData-stream/gh-docs-mcp",
-            "revision": revision,
-            "version": "0.1.0-rc.1",
-        }
+        labels = image_labels(revision, version)
         with builder() as name:
             # A reproducibility check uses separate BuildKit state.
             for role in ROLES:
-                export(name, source, work, destination / role, role, arch, epoch, inputs, seed)
+                export(name, source, work, destination / role, role, arch, epoch, labels, seed)
         result = {role: inspect(destination / role, arch)["digest"] for role in ROLES}
         if repeat:
             with builder() as name:
                 for role in ROLES:
                     second = work / f"repeat-{role}"
-                    export(name, source, work, second, role, arch, epoch, inputs, seed)
+                    export(name, source, work, second, role, arch, epoch, labels, seed)
                     actual = inspect(second, arch)["digest"]
                     if actual != result[role]:
                         raise ValueError(f"{role} did not reproduce its runtime manifest: {result[role]} != {actual}")
-    write_json(destination / "receipt.json", {**inputs, "platform": arch, "images": result,
-                                               "source_date_epoch": int(epoch), "repeated": repeat})
+    write_json(destination / "receipt.json", {"source": SOURCE, "revision": revision, "version": version,
+                                             "platform": arch, "images": result,
+                                             "source_date_epoch": int(epoch), "repeated": repeat})
 
 
 def export(builder_name, source, work, destination, role, arch, epoch, labels, seed):
@@ -178,12 +188,12 @@ def export(builder_name, source, work, destination, role, arch, epoch, labels, s
         *DOCKER, "buildx", "build", "--builder", builder_name, "--platform", f"linux/{arch}",
         "--network", "host", "--allow", "network.host", "--target", role,
         "--build-arg", f"SOURCE_DATE_EPOCH={epoch}",
-        "--tag", f"gh-docs-mcp-{role}:{labels['version']}",
+        "--tag", f"gh-docs-mcp-{role}:{labels['org.opencontainers.image.version']}",
         "--provenance", "mode=min", "--attest", f"type=sbom,generator={SBOM}",
         "--output", f"type=oci,dest={archive},rewrite-timestamp=true",
     ]
     for key, value in labels.items():
-        args += ["--label", f"org.opencontainers.image.{key}={value}"]
+        args += ["--label", f"{key}={value}"]
     if seed:
         args += ["--build-context", f"cargo-registry-seed={seed}"]
     run(*args, source)
@@ -193,13 +203,16 @@ def export(builder_name, source, work, destination, role, arch, epoch, labels, s
     archive.unlink()
 
 
-def assemble(amd64, arm64, destination):
+def assemble(amd64, arm64, destination, *, revision=None, version=None):
     inputs = (amd64, arm64)
     receipts = [json.loads((directory / "receipt.json").read_text()) for directory in inputs]
+    expected_revision = receipts[0]["revision"] if revision is None else revision
+    expected_version = receipts[0]["version"] if version is None else version
     for directory, receipt, arch in zip(inputs, receipts, ARCHES, strict=True):
         if (receipt["platform"] != arch or not receipt["repeated"]
-                or receipt["revision"] != receipts[0]["revision"]
-                or receipt["version"] != receipts[0]["version"]
+                or receipt["source"] != SOURCE or set(receipt["images"]) != set(ROLES)
+                or receipt["revision"] != expected_revision
+                or receipt["version"] != expected_version
                 or receipt["source_date_epoch"] != receipts[0]["source_date_epoch"]):
             raise ValueError("release input receipts do not describe the same reproducible release")
         gate = json.loads((directory / "qualification.json").read_text())
@@ -214,10 +227,11 @@ def assemble(amd64, arm64, destination):
                      for arch, layout in zip(ARCHES, layouts, strict=True)}
         if manifests != {receipt["platform"]: receipt["images"][role] for receipt in receipts}:
             raise ValueError("native receipt does not match the qualified manifest")
-        index = merge(layouts, destination / role)
+        index = merge(layouts, destination / role,
+                      annotations=image_labels(expected_revision, expected_version))
         images[role] = {"index": index, "platforms": manifests}
-    write_json(destination / "release.json", {"revision": receipts[0]["revision"],
-                                             "version": receipts[0]["version"], "images": images})
+    write_json(destination / "release.json", {"revision": expected_revision,
+                                             "version": expected_version, "images": images})
 
 
 @contextmanager
@@ -279,16 +293,20 @@ def main():
     build_args = sub.add_parser("build")
     build_args.add_argument("destination", type=Path)
     build_args.add_argument("--revision", default="HEAD")
+    build_args.add_argument("--version", default=CANDIDATE_VERSION)
     build_args.add_argument("--seed", type=Path)
     build_args.add_argument("--repeat", action="store_true")
     assemble_args = sub.add_parser("assemble")
     for name in (*ARCHES, "destination"):
         assemble_args.add_argument(name, type=Path)
+    assemble_args.add_argument("--revision")
+    assemble_args.add_argument("--version")
     args = parser.parse_args()
     if args.action == "build":
-        build(args.destination.resolve(), args.revision, args.seed, args.repeat)
+        build(args.destination.resolve(), args.revision, args.seed, args.repeat, args.version)
     else:
-        assemble(args.amd64.resolve(), args.arm64.resolve(), args.destination.resolve())
+        assemble(args.amd64.resolve(), args.arm64.resolve(), args.destination.resolve(),
+                 revision=args.revision, version=args.version)
 
 
 if __name__ == "__main__":
