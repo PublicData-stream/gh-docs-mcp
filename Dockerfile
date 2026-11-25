@@ -1,6 +1,8 @@
 FROM docker.io/library/rust:1.100.0-alpine3.24@sha256:8d0e82abfdf9a38071e07cabc5afba4ddbe077631a80e4e742a760c38beadc33 AS rust-base
 ENV CARGO_TARGET_DIR=/tmp/rust/target
 
+FROM scratch AS cargo-registry-seed
+
 FROM rust-base AS git-build
 WORKDIR /git
 RUN apk add --no-cache make=4.4.1-r4 zlib-dev=1.4-r0 zlib-static=1.4-r0 xz=5.8.4-r0
@@ -22,7 +24,12 @@ RUN wget -q -O /tmp/rg.tar.gz https://codeload.github.com/BurntSushi/ripgrep/tar
     && echo '21002cba547651acf2ffb2f1e90010ee9533df3ce8819b171378d55a4f5953fd  /tmp/rg.tar.gz' | sha256sum -c - \
     && tar -xzf /tmp/rg.tar.gz --strip-components=1 \
     && rm /tmp/rg.tar.gz
-RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked cargo fetch --locked
+RUN --mount=type=bind,from=cargo-registry-seed,target=/registry-seed \
+    --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
+    if [ -d /registry-seed/index ]; then \
+        cp -r /registry-seed/index /registry-seed/cache /usr/local/cargo/registry/; \
+    fi \
+    && (cargo fetch --locked --offline || cargo fetch --locked)
 RUN --network=none \
     --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/tmp/rust/target,sharing=locked \
@@ -33,8 +40,6 @@ RUN --network=none \
     && cp LICENSE-MIT UNLICENSE /out/ \
     && readelf -l /out/rg > /tmp/rg-elf && ! grep -q INTERP /tmp/rg-elf \
     && /out/rg --version
-
-FROM scratch AS cargo-registry-seed
 
 FROM rust-base AS app-build
 WORKDIR /src
