@@ -39,6 +39,20 @@ Use TLS for control links before any cross-host deployment. Keep Compose's
 `init: true` for sync so its Git workers can distinguish their daemon parent
 from an orphan reparented to PID 1.
 
+After installing the firewall and provisioning each role's configuration
+and keys, migrate and start the selected roles.
+
+~~~sh
+docker compose --profile feed stop feed sync
+docker compose --profile operator run --rm --no-deps migrate --migrate
+GH_DOCS_CONTROL_ENABLED=1 docker compose up -d serve sync
+GH_DOCS_CONTROL_ENABLED=1 docker compose --profile feed up -d feed
+~~~
+
+Stop both feed and sync before a maintenance operation that requires
+quiesced ingestion. Stop feed alone to keep periodic reconciliation and
+outbox delivery active.
+
 ## Queue, ownership, and rollback
 
 One database session owns the scheduler through advisory lock `-3`. If
@@ -87,6 +101,15 @@ Give feed and sync copies of `feed-sync.key`. Give sync and serve copies of
 role-specific ownership. Key IDs accept 1–32 ASCII letters, digits,
 underscores, and hyphens. Keep private addresses, key bytes, and signed
 requests out of logs and configuration history.
+
+Generate each link's key under a private umask and install the role copies
+with the appropriate owner and permissions.
+
+~~~sh
+umask 077
+openssl rand -out "$private_dir/feed-sync.key" 48
+openssl rand -out "$private_dir/sync-serve.key" 48
+~~~
 
 Rotate one link at a time. On its receiver, install the new active key and
 ID. Set the link's `_PREVIOUS_KEY_ID`, `_PREVIOUS_KEY_FILE`, and

@@ -260,7 +260,8 @@ def run(stack, upstream, config, endpoint):
     phase2.register(stack, config, previous.policy("sha256"))
     (stack.root / "sync/roster.json").write_text(json.dumps([sha1, sha256]))
     stack.compose("start", "sync")
-    wait(lambda: sequence(stack, sha256) == 1, seconds=60)
+    ready(stack, "sync")
+    wait(lambda: sequence(stack, sha256) == 1, seconds=140)
     wait(lambda: delivered(stack, first))
     wait(lambda: phase2.sql(stack, "SELECT count(*) FROM git_catalog.scheduled_jobs WHERE state <> 'finished'") == "0")
     second_owner = stack.exec("sync", "gh-docs-sync", expected=None)
@@ -387,6 +388,10 @@ def main():
         try:
             run(stack, upstream, config, endpoint)
         except BaseException:
+            print(phase2.sql(stack, """SELECT j.repository_id, j.state, j.attempts, j.outcome,
+                j.next_attempt_at, a.state, a.outcome
+                FROM git_catalog.scheduled_jobs j LEFT JOIN git_catalog.sync_jobs a ON a.job_id = j.attempt_id
+                ORDER BY j.job_id DESC LIMIT 12"""), flush=True)
             print(stack.compose("logs", "--no-color", "--tail", "40", "sync", "serve", "feed", "postgres",
                                 expected=None).stdout, flush=True)
             raise

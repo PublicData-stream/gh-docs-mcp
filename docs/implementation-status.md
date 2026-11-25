@@ -433,3 +433,87 @@ Local transcripts and the Bake inputs are in
 firewall scopes, local test tags, generated SDK client, and Minikube
 profiles. The evidence covers synthetic sources on local amd64 and the
 pinned protocol clients.
+
+## Phase 6 qualification
+
+The local Phase 6 gate passed. The images were rebuilt from signed runtime
+revision `4f0b5416eaba8b9aa025a984757bf0fdee276443`. The probes were based on
+signed revision `b3b70d8e5d98f2c948d05d9a2d061724ee16975f` on
+2026-11-25 UTC. The host was Linux amd64, kernel `7.0.0-44-generic`,
+with ext4-backed `/tmp`, rootful Docker `29.10.1`, and Compose `5.8.0`.
+The runs used Rust `1.100.0`, Git `2.53.0` on the host, Git `2.54.1`
+and ripgrep `16.0.0` in the images, Python `3.14.4`, Node `26.13.1`,
+pnpm `12.21.0`, and MCP TypeScript client `2.4.0`.
+
+| Gate | Scope and observed result | Result |
+| --- | --- | --- |
+| Offline Rust | Formatting, frozen all-feature and all-target Clippy with warnings denied, workspace tests, and doc tests passed. | Pass |
+| A18 | Request and response vectors matched the independently signed messages. Raw HTTP probes exercised framing, case-insensitive duplicate headers, MAC and audience rejection, clock skew, replay, receiver restart, and route isolation. Unit tests saturated the replay cache and checked epoch and expiry edges. The Compose receiver accepted both keys during rotation and denied the expired key. | Pass |
+| A19 | The v6 upgrade preserved the existing pointer and outbox tuple. Compose exercised lost hint acknowledgment, restart after fetch, restart after pointer commit, and lost delivery acknowledgment. It also exercised reordered events, rollback with notifications unavailable, pause and resume with unchanged upstream, periodic reconciliation with feed idle, duplicate ownership, bounded reruns, session loss, transient retries, and actual feed-initiated publication. MCP resolved and read the resulting commits using the read-only role. | Pass |
+| A01–A06 regression | Fresh and repeated migrations, v7 catalog upgrades, exact SHA-1/SHA-256 object reads, scoped DB grants and TLS, real Compose isolation and Landlock, and both pinned MCP probes. | Pass |
+| A07–A17 regression | Synthetic HTTPS acquisition, interrupted publication and recovery, retention and rollback, visibility and revocation, raw bytes, cursor paging, search and history, and worker limits and cancellation. | Pass |
+| Minikube | One disposable rootless Docker `29.10.0` profile with Minikube `1.39.0`, Kubernetes `1.37.0`, and containerd `2.3.4`. Periodic reconciliation was deferred so the SHA-1 publication required the real feed hint. The sync daemon observed authenticated delivery, and the normal serve image read the published generation over MCP pod loopback. | Pass |
+
+The synthetic history fixtures started at
+`abb563788e9fb63dc4a86ef8eea26b5b98501785` for SHA-1 and
+`6d8be56a114aa5e29b4708e3435e894847616712be33d3bc7d3df1b4a19213f4`
+for SHA-256. Preliminary Compose runs found stale workspace artifacts in
+the Docker cache and a rotation probe that attached to the receiver.
+A concurrent Phase 1 attempt hit the PostgreSQL startup health timeout.
+The first signed-archive Phase 6 Compose attempt timed out waiting for
+initial scheduled publication. The retry added an explicit scheduler
+health check, a 140-second startup deadline and a queue-state dump on
+failure. The corrected probes passed on the archive-built images.
+The preliminary Minikube daemon ran as PID 1 and the Git worker
+rejected that parent. The corrected smoke uses a supervising shell and
+preserves the existing worker guard. The interruption probes exercised
+process and database session loss. Production, live-source, cross-host
+and physical power-loss qualification remain separate.
+
+### Reproduction and artifacts
+
+The build used Buildx Bake with host networking for the pinned input
+downloads, local Docker output, and an unpacked archive of the tested
+revision. The table lists the local image IDs for Phase 6.
+
+| Image target | Local image ID |
+| --- | --- |
+| Serve | `sha256:fd6a0a1e27afbd7a7f2c0e934cdec5696416347a23112c8109af089fc5a10894` |
+| Sync | `sha256:22e6887cb70820f2cb91cfc51e482390dcb2bcc88b44fe71fb767c97f535262c` |
+| Feed | `sha256:40985a41b03bcc34057532469ef3525266d7085f9c28f6a086dc8d533decf8b8` |
+| Phase 6 serve | `sha256:351afe5182d8a0bd76523a9be94b5cded86cf6e0b7538ed2ce0faa6f893dc076` |
+| Phase 6 sync | `sha256:62ff5473b29b729e1df77ba0f2cce2851f3a5f1ddfdc6caafc052daf6e28a9be` |
+| Phase 6 feed | `sha256:663f0a4e91f7f6eea483faae131c74889fde97fe3da1fe16652eec0cf1e162c9` |
+| Synthetic upstream | `sha256:59e5b0590dd9877a1a09bdd6178e638611f0089c785fac47665202c7b95f87bf` |
+| Pinned PostgreSQL | `sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f` |
+| Pinned proxy and sink | `sha256:0272e4604ed93c1792f03695a033a6e8546840f86e0de20a884bb17d2c924883` |
+
+Run the offline gate and Phase 6 probes as documented in the
+[control runbook](control.md#qualification). The earlier Compose probes
+used the same image tag and the pinned SDK fixture.
+
+~~~sh
+export CARGO_TARGET_DIR=/tmp/rust/target
+scripts/phase0/check-rust.sh
+client_dir=$(scripts/phase0/prepare-client.sh)
+node=$(command -v node)
+sudo -n python3 -B scripts/phase0/integration.py --skip-build --image-tag "$tag" \
+  --node "$node" --client-dir "$client_dir"
+sudo -n python3 -B scripts/phase1/integration.py --image-tag "$tag" \
+  --node "$node" --client-dir "$client_dir"
+for phase in 2 3 4; do
+  sudo -n python3 -B "scripts/phase$phase/integration.py" --image-tag "$tag"
+done
+sudo -n python3 -B scripts/phase5/integration.py --image-tag "$tag" \
+  --node "$node" --client-dir "$client_dir"
+~~~
+
+The receipts for tag `p6-wn1jljb2-qual` are in
+`/tmp/gh-docs-phase6.WN1jLjB2`. They include the Bake input, the exact
+image IDs, `rust-qualified.log`, the six earlier Compose transcripts,
+the successful `phase6-verified.log` retry, and
+`minikube-qualified.log`.
+The retry started at 05:59:27 UTC. Cleanup removed the disposable
+Compose resources and firewall scopes, the Minikube profiles, the
+generated SDK fixture and bootstrap files, and 36 local test image tags.
+The transcripts and image IDs remain at the receipt path.
