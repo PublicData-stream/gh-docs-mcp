@@ -159,6 +159,8 @@ pub async fn acquire(
         .map_err(|_| TransferError::permanent("ref_policy"))?;
     let mut fetch = args(&[
         "fetch",
+        // Keep routine per-ref summaries within the bounded diagnostic channel.
+        "--quiet",
         "--atomic",
         "--no-tags",
         "--no-recurse-submodules",
