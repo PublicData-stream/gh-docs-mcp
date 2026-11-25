@@ -76,7 +76,11 @@ impl Rate {
 }
 
 fn identity() -> Implementation {
-    Implementation::new("gh-docs-mcp", env!("CARGO_PKG_VERSION"))
+    let version = match env!("CARGO_PKG_VERSION") {
+        "0.0.0" => "0.0.0-dev.archive",
+        version => version,
+    };
+    Implementation::new("gh-docs-mcp", version)
 }
 
 fn response_meta() -> MetaObject {

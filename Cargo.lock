@@ -527,7 +527,7 @@ dependencies = [
 
 [[package]]
 name = "gh-docs-core"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "schemars",
@@ -539,7 +539,7 @@ dependencies = [
 
 [[package]]
 name = "gh-docs-git"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "gh-docs-core",
  "libc",
@@ -548,7 +548,7 @@ dependencies = [
 
 [[package]]
 name = "gh-docs-mcp"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -573,7 +573,7 @@ dependencies = [
 
 [[package]]
 name = "gh-docs-search"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "gh-docs-core",
@@ -592,7 +592,7 @@ dependencies = [
 
 [[package]]
 name = "gh-docs-storage"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "gh-docs-core",
  "gh-docs-git",
@@ -606,7 +606,7 @@ dependencies = [
 
 [[package]]
 name = "gh-docs-sync"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -627,7 +627,7 @@ dependencies = [
 
 [[package]]
 name = "gh-docs-test-support"
-version = "0.1.0"
+version = "0.0.0"
 dependencies = [
  "base64 0.22.1",
  "gh-docs-core",

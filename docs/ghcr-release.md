@@ -11,9 +11,25 @@ The repeat check compares runnable manifests from independent builders.
 
 The combined artifact includes `release.json` and `SHA256SUMS`. Retain
 both native evidence artifacts with the bundle. They include host and test
-evidence, Cargo inventories, exact image audits, and the pinned Git source
-archive. The combined bundle is retained for 14 days, native evidence for
-30 days, and the publication receipt for 90 days.
+evidence, the stamped Cargo inputs and inventory, exact image audits, and
+the pinned Git source archive. The combined bundle is retained for 14 days,
+native evidence for 30 days, and the publication receipt for 90 days.
+
+## Cargo versions
+
+Keep `workspace.package.version` and the committed first-party Cargo lock
+entries at `0.0.0`. Production packages inherit the workspace version and
+the test-support package declares `0.0.0` explicitly. Unstamped builds
+report `0.0.0-dev.archive` over MCP.
+
+The native image build applies the full release tag in a disposable archive
+of the verified commit. It changes the root Cargo workspace version and
+the production package entries in the copy of `Cargo.lock`. The MCP server,
+OCI labels, and build receipt use the same version. Audit evidence records
+the stamped files and verifies their hashes against the native build receipt.
+To rebuild, pass the same revision and full version to
+`scripts/phase8/images.py build`. Manual qualification defaults to
+`0.0.0-rc.1`. The bare `0.0.0` version is reserved for development.
 
 ## Publish a release
 
@@ -22,11 +38,14 @@ archive. The combined bundle is retained for 14 days, native evidence for
    including applicable license, notice, and corresponding-source
    arrangements before public distribution.
 2. Choose `X.Y.Z` for a stable release or `X.Y.Z-beta.N` for a beta.
-   Use the version committed in `workspace.package.version` for `X.Y.Z`.
-   The OCI metadata records the full tag. Create an annotated GPG-signed
-   tag with `git tag -s`, verify it with `git tag -v`, and push that tag.
-   GitHub must be able to verify the signing key.
-3. Publish a GitHub Release for that existing tag. Mark beta releases as
+   Create an annotated GPG-signed tag with `git tag -s`, verify it with
+   `git tag -v`, and push that tag. GitHub must be able to verify the signing
+   key.
+3. Refresh `origin/main` and run preflight with an authenticated `gh` that
+   can read the repository, Actions runs, and checks. For example, run
+   `python3 -B scripts/phase8/release_source.py preflight 1.0.2`. It checks
+   the exact signed tag, canonical `main` CI, and version stamping.
+4. Publish a GitHub Release for that existing tag. Mark beta releases as
    prereleases. Publishing the release authorizes the workflow to write the
    versioned indexes after qualification. A tag push or a draft release
    alone does not start publication.
@@ -51,6 +70,9 @@ source revision, release version, and runnable manifest digest for each
 platform. See the [Compose deployment procedure](deployment.md).
 
 ## Recover a partial publication
+
+If source verification failed for a published immutable release, use a new
+eligible version for the corrected commit and run preflight before publishing.
 
 Rerun failed jobs while the original qualified bundle is still available.
 This reuses the exact artifact ID. Each version tag is accepted only if

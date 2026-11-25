@@ -17,11 +17,10 @@ import time
 from urllib.request import urlopen
 
 from backup import sha256
+from release_version import CANDIDATE_VERSION, ROOT, cargo_digests, parse_version, stage_source
 
 
-ROOT = Path(__file__).resolve().parents[2]
 SOURCE = "https://github.com/PublicData-stream/gh-docs-mcp"
-CANDIDATE_VERSION = "0.1.0-rc.1"
 DOCKER = ("docker", "--context", "default")
 ROLES = ("serve", "sync", "feed")
 ARCHES = ("amd64", "arm64")
@@ -29,7 +28,6 @@ BUILDKIT = "docker.io/moby/buildkit:v0.35.1@sha256:baf6138eb8c37644800c7c913fba0
 REGISTRY = "docker.io/library/registry:3@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df6e55cce80d22deb1de36f1bc3c"
 SBOM = "docker.io/docker/buildkit-syft-scanner:stable-1@sha256:873a7458c3c8ac8e32c7b796c10e1600b07b963d2aa000a72a2d97aaaa2d6315"
 INDEX = "application/vnd.oci.image.index.v1+json"
-VERSION = re.compile(r"(?:0|[1-9][0-9]*)(?:\.(?:0|[1-9][0-9]*)){2}(?:-(?:beta|rc)\.[1-9][0-9]*)?")
 
 
 def run(*args, **kwargs):
@@ -155,21 +153,15 @@ def image_labels(revision, version):
 
 
 def build(destination, revision, seed, repeat, version=CANDIDATE_VERSION):
-    if len(version) > 128 or not VERSION.fullmatch(version):
-        raise ValueError("invalid OCI image version")
+    parse_version(version)
     arch = architecture()
-    revision = output("git", "-C", ROOT, "rev-parse", f"{revision}^{{commit}}")
+    revision = output("git", "-C", ROOT, "rev-parse", "--verify", "--end-of-options", f"{revision}^{{commit}}")
     epoch = output("git", "-C", ROOT, "show", "-s", "--format=%ct", revision)
     destination.mkdir(mode=0o700)
     with tempfile.TemporaryDirectory(prefix="ghdocs8-source-", dir="/tmp") as directory:
         work = Path(directory)
-        archive = work / "source.tar"
-        with archive.open("wb") as data:
-            run("git", "-C", ROOT, "archive", "--format=tar", revision, stdout=data)
-        source = work / "source"
-        source.mkdir()
-        with tarfile.open(archive) as data:
-            data.extractall(source, filter="data")
+        source = stage_source(revision, version, work)
+        inputs = cargo_digests(source)
         labels = image_labels(revision, version)
         with builder() as name:
             # A reproducibility check uses separate BuildKit state.
@@ -186,7 +178,8 @@ def build(destination, revision, seed, repeat, version=CANDIDATE_VERSION):
                         raise ValueError(f"{role} did not reproduce its runtime manifest: {result[role]} != {actual}")
     write_json(destination / "receipt.json", {"source": SOURCE, "revision": revision, "version": version,
                                              "platform": arch, "images": result,
-                                             "source_date_epoch": int(epoch), "repeated": repeat})
+                                             "source_date_epoch": int(epoch), "repeated": repeat,
+                                             "cargo_inputs": inputs})
 
 
 def export(builder_name, source, work, destination, role, arch, epoch, labels, seed):
@@ -220,7 +213,8 @@ def assemble(amd64, arm64, destination, *, revision=None, version=None):
                 or receipt["source"] != SOURCE or set(receipt["images"]) != set(ROLES)
                 or receipt["revision"] != expected_revision
                 or receipt["version"] != expected_version
-                or receipt["source_date_epoch"] != receipts[0]["source_date_epoch"]):
+                or receipt["source_date_epoch"] != receipts[0]["source_date_epoch"]
+                or receipt["cargo_inputs"] != receipts[0]["cargo_inputs"]):
             raise ValueError("release input receipts do not describe the same reproducible release")
         gate = json.loads((directory / "qualification.json").read_text())
         if gate != {"platform": arch, "revision": receipt["revision"], "images": receipt["images"],

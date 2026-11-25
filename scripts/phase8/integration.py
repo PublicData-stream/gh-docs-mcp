@@ -300,7 +300,7 @@ def load(wire, records):
             "sampled_serve_process_peaks": peak}
 
 
-def rehearse(args, refs, work):
+def rehearse(args, refs, work, version):
     bundle = work / "backup"
     with phase2.stack(args.fixture_tag, publication=True, fixture_setup=phase5.prepare,
                       serve_target="mcp-serve") as (source, upstream, config, endpoint):
@@ -341,6 +341,8 @@ def rehearse(args, refs, work):
         open_stack(target)
         wire = phase5.Wire(target)
         wire.validate_registry(host_rejection=(403, 404, 421))
+        discover = wire.send("server/discover", {})["result"]
+        assert discover["_meta"]["io.modelcontextprotocol/serverInfo"]["version"] == version, discover
         proxy_probes(wire)
         phase0.db_tests(target)
         phase0.network_tests(target, table)
@@ -397,10 +399,11 @@ def main():
     args = parser.parse_args()
     if not __debug__ or os.getuid() != 0 or not args.evidence.resolve().is_relative_to("/tmp"):
         parser.error("run under sudo with assertions and evidence under /tmp")
+    version = json.loads((args.bundle / "receipt.json").read_bytes())["version"]
     signal.signal(signal.SIGTERM, phase0.terminate)
     with (tempfile.TemporaryDirectory(dir="/tmp", prefix="ghdocs8-rehearsal-") as directory,
           images.load_native(args.bundle, args.runtime_tag) as refs):
-        result = rehearse(args, refs, Path(directory))
+        result = rehearse(args, refs, Path(directory), version)
     with args.evidence.open("x") as evidence:
         json.dump(result, evidence, indent=2)
         evidence.write("\n")

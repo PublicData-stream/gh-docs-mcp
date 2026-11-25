@@ -6,12 +6,14 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import tomllib
 import unittest
 from unittest.mock import Mock, patch
 
 import images
 import publish
 import release_source as source
+import release_version as cargo_version
 
 
 REVISION = "a" * 40
@@ -19,12 +21,46 @@ TAG_OBJECT = "b" * 40
 VERSION = "0.9.0"
 
 
+def workspace_file(name):
+    return (cargo_version.ROOT / name).read_text()
+
+
+class CargoVersionTests(unittest.TestCase):
+    def test_stamp_changes_only_production_versions(self):
+        committed = {name: tomllib.loads(workspace_file(name)) for name in cargo_version.CARGO_INPUTS}
+        for version in ("1.0.2", "1.0.2-beta.1", cargo_version.CANDIDATE_VERSION):
+            with self.subTest(version=version):
+                stamped = cargo_version.stamped_inputs(workspace_file, version)
+                expected = {name: tomllib.loads(workspace_file(name)) for name in stamped}
+                expected["Cargo.toml"]["workspace"]["package"]["version"] = version
+                for package in expected["Cargo.lock"]["package"]:
+                    if package["name"] in cargo_version.PRODUCTION.values() and "source" not in package:
+                        package["version"] = version
+                self.assertEqual(set(stamped), set(committed))
+                self.assertEqual({name: tomllib.loads(text) for name, text in stamped.items()}, expected)
+                self.assertEqual({name: tomllib.loads(workspace_file(name)) for name in stamped}, committed)
+
+    def test_workspace_rejects_bad_sentinel_metadata(self):
+        for path, old, new, expected in (
+            ("Cargo.toml", 'version = "0.0.0"', 'version = "1.0.2"', "workspace.package.version"),
+            ("apps/Cargo.toml", "version.workspace = true", 'version = "0.0.0"', "apps/Cargo.toml"),
+            ("crates/test-support/Cargo.toml", 'version = "0.0.0"', "version.workspace = true", "test-support"),
+            ("Cargo.lock", 'name = "gh-docs-core"\nversion = "0.0.0"',
+             'name = "gh-docs-core"\nversion = "1.0.2"', "Cargo.lock.*gh-docs-core"),
+        ):
+            with self.subTest(path=path), self.assertRaisesRegex(ValueError, expected):
+                cargo_version.stamped_inputs(
+                    lambda name: workspace_file(name).replace(old, new, 1) if name == path else workspace_file(name),
+                    "1.0.2",
+                )
+
+
 class SourceTests(unittest.TestCase):
     def test_release_event_and_version(self):
         version = f"{VERSION}-beta.1"
         self.assertEqual(source.release_tag(version), (VERSION, "beta"))
         self.assertEqual(source.release_tag(VERSION), (VERSION, "stable"))
-        for invalid in ("v0.9.0", "0.09.0", "0.9.0-beta.0", "0.9.0-build.aaaaaaaa", "0.9.0-rc.1"):
+        for invalid in ("0.0.0", "v0.9.0", "0.09.0", "0.9.0-beta.0", "0.9.0-build.aaaaaaaa", "0.9.0-rc.1"):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 source.release_tag(invalid)
         release = {"action": "published", "release": {"tag_name": version, "draft": False, "prerelease": True}}
@@ -32,10 +68,38 @@ class SourceTests(unittest.TestCase):
         for event, fields in (("push", {}), ("release", {"draft": True}), ("release", {"prerelease": False})):
             with self.subTest(event=event, fields=fields), self.assertRaises(ValueError):
                 source.verify_event(event, {**release, "release": {**release["release"], **fields}}, version, "beta")
-        with patch.object(source, "git", return_value=f'[workspace.package]\nversion = "{VERSION}"'):
-            source.verify_workspace(REVISION, VERSION)
-            with self.assertRaisesRegex(ValueError, "workspace.package.version"):
-                source.verify_workspace(REVISION, "0.9.1")
+
+    def test_preflight_checks_exact_tag_and_only_then_stages(self):
+        ref = f"refs/tags/{VERSION}"
+
+        def git(*args):
+            if args == ("rev-parse", "--verify", ref):
+                return TAG_OBJECT
+            if args == ("rev-parse", "--verify", f"{ref}^{{commit}}"):
+                return REVISION
+            if args == ("merge-base", "--is-ancestor", REVISION, "refs/remotes/origin/main"):
+                return ""
+            self.assertEqual(args[0], "show")
+            self.assertTrue(args[1].startswith(f"{REVISION}:"))
+            return workspace_file(args[1].split(":", 1)[1])
+
+        staged = Mock()
+        with (patch.object(source, "git", side_effect=git), patch.object(source, "verify_tag") as tag,
+              patch.object(source, "verify_ci") as ci, patch.object(source, "stage_source", staged)):
+            source.preflight(VERSION)
+            tag.assert_called_once_with(VERSION, REVISION, TAG_OBJECT)
+            ci.assert_called_once_with(REVISION)
+            staged.assert_called_once()
+            revision, version, directory = staged.call_args.args
+            self.assertEqual((revision, version), (REVISION, VERSION))
+            self.assertTrue(directory.is_relative_to("/tmp"))
+            self.assertFalse(directory.exists())
+
+            staged.reset_mock()
+            ci.side_effect = ValueError("CI failed")
+            with self.assertRaisesRegex(ValueError, "CI failed"):
+                source.preflight(VERSION)
+            staged.assert_not_called()
 
     def test_signed_annotated_tag(self):
         current = {"ref": f"refs/tags/{VERSION}", "object": {"type": "tag", "sha": TAG_OBJECT}}
@@ -116,7 +180,8 @@ def bundle(directory, revision, version):
             images.write_json(layout / "index.json", {"schemaVersion": 2, "manifests": [runtime, attestation]})
         gate = {"platform": arch, "revision": revision, "images": manifests}
         images.write_json(native / "receipt.json", {**gate, "version": version, "source": images.SOURCE,
-                                                   "source_date_epoch": 1, "repeated": True})
+                                                   "source_date_epoch": 1, "repeated": True,
+                                                   "cargo_inputs": {name: "a" * 64 for name in cargo_version.CARGO_INPUTS}})
         images.write_json(native / "qualification.json", {**gate, "result": "pass"})
     assembled = directory / "bundle"
     images.assemble(directory / "amd64", directory / "arm64", assembled, revision=revision, version=version)
@@ -131,6 +196,17 @@ def seal(assembled):
 
 
 class BundleTests(unittest.TestCase):
+    def test_assembly_rejects_different_stamped_inputs(self):
+        with tempfile.TemporaryDirectory(dir="/tmp", prefix="ghdocs-release-test-") as temporary:
+            work = Path(temporary) / "input"
+            bundle(work, REVISION, VERSION)
+            path = work / "arm64" / "receipt.json"
+            receipt = json.loads(path.read_bytes())
+            receipt["cargo_inputs"]["Cargo.lock"] = "b" * 64
+            images.write_json(path, receipt)
+            with self.assertRaisesRegex(ValueError, "same reproducible release"):
+                images.assemble(work / "amd64", work / "arm64", work / "new-bundle")
+
     def test_corrupt_bundle_blocks_all_registry_access(self):
         with tempfile.TemporaryDirectory(dir="/tmp", prefix="ghdocs-release-test-") as temporary:
             work = Path(temporary)

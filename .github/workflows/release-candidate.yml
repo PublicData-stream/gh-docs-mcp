@@ -25,7 +25,7 @@ env:
   CARGO_TARGET_DIR: /tmp/rust/target
   TMPDIR: /tmp
   QUALIFY_REVISION: ${{ inputs.revision || github.sha }}
-  QUALIFY_VERSION: ${{ inputs.version || '0.1.0-rc.1' }}
+  QUALIFY_VERSION: ${{ inputs.version || '0.0.0-rc.1' }}
 
 jobs:
   native:

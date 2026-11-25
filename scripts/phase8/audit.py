@@ -10,8 +10,9 @@ import subprocess
 import tempfile
 
 from backup import sha256
-from images import DOCKER, ROOT, architecture, load_native, run, write_json
+from images import DOCKER, architecture, load_native, run, write_json
 from pins import infrastructure
+from release_version import CARGO_INPUTS, cargo_digests, stage_source
 
 
 TRIVY = "ghcr.io/aquasecurity/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb"
@@ -59,14 +60,14 @@ def download(url, expected, path):
         raise ValueError("source archive digest mismatch")
 
 
-def supply_chain(out, ripgrep_lock, advisory_db):
+def supply_chain(out, source, ripgrep_lock, advisory_db):
     blockers = []
     proxy_lock = out / "oxibelt-Cargo.lock"
     with proxy_lock.open("w") as record:
         run("gh", "api", "-H", "Accept: application/vnd.github.raw+json",
             f"repos/OxiBelt/OxiBelt/contents/Cargo.lock?ref={OXIBELT_REVISION}",
             stdout=record, timeout=60)
-    for name, lock in (("workspace", ROOT / "Cargo.lock"), ("ripgrep", ripgrep_lock),
+    for name, lock in (("workspace", source / "Cargo.lock"), ("ripgrep", ripgrep_lock),
                        ("oxibelt", proxy_lock)):
         args = ["cargo", "audit", "--file", lock, "--json", "--db", advisory_db, "--no-fetch"]
         with (out / f"{name}-rustsec.json").open("w") as receipt:
@@ -75,7 +76,7 @@ def supply_chain(out, ripgrep_lock, advisory_db):
         if report["vulnerabilities"]["count"]:
             blockers.append(f"{name}: RustSec vulnerabilities")
     with (out / "cargo-metadata.json").open("w") as metadata:
-        run("cargo", "metadata", "--format-version", "1", "--frozen", stdout=metadata)
+        run("cargo", "metadata", "--format-version", "1", "--frozen", cwd=source, stdout=metadata)
     return blockers
 
 
@@ -145,6 +146,14 @@ def main():
     out.mkdir()
     with tempfile.TemporaryDirectory(prefix="ghdocs8-audit-", dir="/tmp") as directory:
         work = Path(directory)
+        receipt = json.loads((args.bundle / "receipt.json").read_bytes())
+        source = stage_source(receipt["revision"], receipt["version"], work)
+        if cargo_digests(source) != receipt["cargo_inputs"]:
+            raise ValueError("stamped Cargo inputs do not match the native build receipt")
+        cargo_evidence = out / "cargo-inputs"
+        cargo_evidence.mkdir()
+        for name in CARGO_INPUTS:
+            shutil.copyfile(source / name, cargo_evidence / name)
         ripgrep = work / "ripgrep.tar.gz"
         download(RIPGREP, "21002cba547651acf2ffb2f1e90010ee9533df3ce8819b171378d55a4f5953fd", ripgrep)
         lock = out / "ripgrep-Cargo.lock"
@@ -165,7 +174,7 @@ def main():
             run("git", "clone", "--depth", "1", "https://github.com/RustSec/advisory-db.git", advisory_db)
         with (out / "rustsec-revision.txt").open("w") as record:
             run("git", "-C", advisory_db, "rev-parse", "HEAD", stdout=record)
-        blockers = supply_chain(out, lock, advisory_db)
+        blockers = supply_chain(out, source, lock, advisory_db)
         blockers += exact_images(args.bundle, out, args.tag, work)
     write_json(out / "disposition.json", {"blockers": sorted(set(blockers))})
     if blockers:
