@@ -244,8 +244,8 @@ def wire_commands(fmt, context, phrase):
     return commands
 
 
-def smoke(args, serve=None, *, explore=False, wire=False):
-    phase = 5 if wire else 4 if explore else 3 if serve else 2
+def smoke(args, serve=None, *, explore=False, wire=False, control=None):
+    phase = 6 if control else 5 if wire else 4 if explore else 3 if serve else 2
     profile = f"ghdocs{phase}-{secrets.token_hex(5)}"
     root = Path(tempfile.mkdtemp(prefix=f"{profile}-minikube-", dir="/tmp"))
     environment = {**os.environ, "MINIKUBE_HOME": str(root), "KUBECONFIG": str(root / "kubeconfig"),
@@ -273,11 +273,16 @@ def smoke(args, serve=None, *, explore=False, wire=False):
         images = [postgres, args.sync_image, args.upstream_image]
         if serve:
             images.append(serve)
+        if control:
+            images.append(args.feed_image)
         execute([*docker, "image", "inspect", "--format", "{{.Id}}", *images])
         execute([*docker, "image", "save", "-o", bundle, *images], timeout=150)
         manifest = root / "job.json"
-        manifest.write_text(json.dumps(resources(
-            root, args.sync_image, args.upstream_image, postgres, serve, explore=explore, wire=wire)))
+        if control:
+            manifest.write_text(json.dumps(control(root, args)))
+        else:
+            manifest.write_text(json.dumps(resources(
+                root, args.sync_image, args.upstream_image, postgres, serve, explore=explore, wire=wire)))
         started = True
         execute([*minikube, "start", "--driver=docker", "--container-runtime=containerd", "--nodes=1",
                  "--cpus=4", "--memory=6144", "--listen-address=127.0.0.1", "--install-addons=false",
@@ -290,10 +295,14 @@ def smoke(args, serve=None, *, explore=False, wire=False):
                        timeout=250, check=False)
         if wait.returncode:
             execute([*scope, "describe", "pod", "-l", "job-name=private-fetch"], check=False)
-            for name in ("unpack", "postgres", "upstream", "registration"):
+            diagnostic = ("unpack", "postgres", "upstream", "registration")
+            if control:
+                diagnostic += ("schedule", "serve", "sync", "feed")
+            for name in diagnostic:
                 execute([*scope, "logs", "job/private-fetch", "-c", name], check=False)
-        execute([*scope, "logs", "job/private-fetch", "-c", "reconcile"], check=wait.returncode == 0)
-        if serve:
+        execute([*scope, "logs", "job/private-fetch", "-c", "control-smoke" if control else "reconcile"],
+                check=wait.returncode == 0)
+        if serve and not control:
             execute([*scope, "logs", "job/private-fetch", "-c", "read"], check=wait.returncode == 0)
         wait.check_returncode()
     finally:

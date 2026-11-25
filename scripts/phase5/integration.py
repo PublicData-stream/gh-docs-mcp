@@ -122,13 +122,14 @@ def migration_and_legacy(wire, config, endpoint):
     wire.call("git.rg", {"context": old, "pattern": PHRASE}, error="policy_denied")
     wire.call("git.log", {"context": old}, error="policy_denied")
     before = wire.call("repository.info", {"repository_id": repo})
+    phase2.restore_v6(stack)
     ddl = (ROOT / "migrations/0005_exploration.sql").read_text().split("INSERT INTO")[0]
     ddl = ddl.replace("CREATE VIEW", "CREATE OR REPLACE VIEW")
     phase2.sql(stack, f"BEGIN; {ddl} DELETE FROM git_catalog.migrations WHERE version = 6; COMMIT;")
     assert phase2.sql(stack, "SELECT max(version) FROM git_catalog.migrations") == "5"
     stack.one_shot("migrate")
     stack.one_shot("migrate")
-    assert phase2.sql(stack, "SELECT max(version) FROM git_catalog.migrations") == "6"
+    assert phase2.sql(stack, "SELECT max(version) FROM git_catalog.migrations") == "7"
     assert wire.call("repository.info", {"repository_id": repo}) == before
     assert phase2.sql(stack, """SELECT has_table_privilege('gh_docs_serve',
         'git_catalog.exploration_generations', 'SELECT'),

@@ -85,6 +85,7 @@ def schema_and_grants(stack):
 
 
 def migration(stack, repo, expected):
+    phase2.restore_v6(stack)
     # Restore the Phase 3 schema on this disposable database with published data.
     phase2.sql(stack, """BEGIN; DROP VIEW git_catalog.exploration_generations;
         DELETE FROM git_catalog.migrations WHERE version IN (5, 6); COMMIT;""")

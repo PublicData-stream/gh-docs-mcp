@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 import ipaddress
 import json
 import os
+import re
 from pathlib import Path
 import secrets
 import shutil
@@ -27,8 +28,8 @@ APPROVAL = "/phase2-approval.json"
 
 
 @contextmanager
-def stack(tag, *, publication=False, fixture_setup=prepare, serve_target=None):
-    phase = 5 if serve_target == "mcp-serve" else 4 if serve_target == "phase4-serve" else 3 if publication else 2
+def stack(tag, *, publication=False, fixture_setup=prepare, serve_target=None, control=False):
+    phase = 6 if control else 5 if serve_target == "mcp-serve" else 4 if serve_target == "phase4-serve" else 3 if publication else 2
     project = f"ghdocs{phase}-{secrets.token_hex(5)}"
     root = Path(tempfile.mkdtemp(prefix=f"{project}-", dir="/tmp"))
     table = project.replace("-", "_")
@@ -42,10 +43,10 @@ def stack(tag, *, publication=False, fixture_setup=prepare, serve_target=None):
     address = str(ipaddress.ip_network(instance.env["SYNC_CIDR"])[4])
     instance.env["UPSTREAM_IP"] = address
     override = root / "phase2.json"
-    sync = "phase3-sync" if publication else "phase2-sync"
+    sync = "phase6-sync" if control else "phase3-sync" if publication else "phase2-sync"
     serve_target = serve_target or ("phase3-serve" if publication else None)
     serve = {"serve": {"image": f"gh-docs-{serve_target}:{tag}"}} if serve_target else {}
-    override.write_text(json.dumps({"services": {
+    services = {
         **serve,
         "sync": {
             "image": f"gh-docs-{sync}:{tag}",
@@ -60,14 +61,17 @@ def stack(tag, *, publication=False, fixture_setup=prepare, serve_target=None):
             "networks": {"sync_egress": {"ipv4_address": address}},
             "volumes": [{"type": "bind", "source": str(upstream), "target": "/fixture", "read_only": True}],
         },
-    }}))
+    }
+    if control:
+        configure_control(instance, services, tag, upstream, address)
+    override.write_text(json.dumps({"services": services}))
     instance.compose_command[6:6] = ["-f", str(override)]
     installed = False
     cleaned = False
     try:
         instance.create()
         instance.compose("create", "--no-build", "--pull", "never", "upstream")
-        firewall.install(table, instance.env, root, sync_fixture=True)
+        firewall.install(table, instance.env, root, sync_fixture=True, control=control, feed_fixture=control)
         installed = True
         instance.start()
         instance.compose("start", "upstream")
@@ -83,7 +87,8 @@ def stack(tag, *, publication=False, fixture_setup=prepare, serve_target=None):
             raise RuntimeError(f"synthetic upstream did not become ready: {response.stdout}")
         yield instance, upstream, approval_path, endpoint
     except BaseException:
-        print(instance.compose("logs", "--no-color", "--tail", "12", "upstream", expected=None).stdout, flush=True)
+        roles = ("sync", "serve", "feed", "postgres", "upstream") if control else ("upstream",)
+        print(instance.compose("logs", "--no-color", "--tail", "12", *roles, expected=None).stdout, flush=True)
         raise
     finally:
         try:
@@ -96,6 +101,49 @@ def stack(tag, *, publication=False, fixture_setup=prepare, serve_target=None):
                 shutil.rmtree(root)
             else:
                 print(f"cleanup pending for {project} at {root}", file=sys.stderr)
+
+
+def configure_control(stack, services, tag, upstream, address):
+    feed_address = str(ipaddress.ip_network(stack.env["FEED_CIDR"])[4])
+    stack.env["FEED_UPSTREAM_IP"] = feed_address
+    services["upstream"]["networks"]["feed_egress"] = {"ipv4_address": feed_address}
+    for role in ("sync", "feed", "serve"):
+        directory = stack.root / role
+        (directory / "fault").touch()
+        (directory / "roster.json").write_text("[]")
+        config = services.setdefault(role, {})
+        config["image"] = f"gh-docs-phase6-{role}:{tag}"
+        config["environment"] = {
+            "GH_DOCS_CONTROL_ENABLED": "1",
+            "GH_DOCS_PHASE6_FAULT_FILE": "/run/secrets/fault",
+        }
+        if role in ("sync", "feed"):
+            host = address if role == "sync" else feed_address
+            config["environment"].update({
+                f"GH_DOCS_{role.upper()}_ROSTER_FILE": "/run/secrets/roster.json",
+                "GH_DOCS_PHASE6_UPSTREAM": f"{host}:8443",
+                "GH_DOCS_PHASE6_UPSTREAM_CA": CA,
+            })
+            if role == "feed":
+                config["volumes"] = [{"type": "bind", "source": str(upstream / "tls/ca.crt"),
+                                       "target": CA, "read_only": True}]
+
+
+def restore_v6(stack):
+    """Rewind the Phase 6 DDL in a disposable probe while keeping old data."""
+    control = (ROOT / "migrations/0007_control_plane.sql").read_text()
+    names = re.findall(r"^CREATE FUNCTION git_catalog\.(\w+)\(", control, re.MULTILINE)
+    drops = "; ".join(f"DROP FUNCTION git_catalog.{name}" for name in names)
+    previous = (ROOT / "migrations/0004_publication.sql").read_text()
+    promote = previous[previous.index("CREATE FUNCTION git_catalog.promote_generation"):
+                       previous.index("REVOKE EXECUTE ON ALL FUNCTIONS")]
+    promote = promote.replace("CREATE FUNCTION", "CREATE OR REPLACE FUNCTION", 1)
+    sql(stack, f"""BEGIN; {drops};
+        DROP TABLE git_catalog.hint_receipts, git_catalog.scheduled_jobs, git_catalog.sync_schedule;
+        ALTER TABLE git_catalog.sync_jobs DROP COLUMN scheduler_retry_after;
+        ALTER TABLE git_catalog.notification_outbox DROP COLUMN delivery_attempts, DROP COLUMN next_attempt_at;
+        {promote}
+        DELETE FROM git_catalog.migrations WHERE version = 7; COMMIT;""")
 
 
 def sql(stack, statement):
