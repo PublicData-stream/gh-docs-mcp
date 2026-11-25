@@ -335,8 +335,20 @@ async fn publish(db: &Client, job: &Job, attempt: Attempt) -> Result<()> {
         Ok::<_, Box<dyn std::error::Error + Send + Sync>>(())
     }
     .await;
-    if result.is_ok() {
+    let Err(error) = result else {
         return Ok(());
+    };
+    #[cfg(feature = "phase6-fixtures")]
+    if control::fixture().is_ok_and(|fixture| fixture.is_some()) {
+        eprintln!("synthetic scheduled publication failed: {error:?}");
+    }
+    if let Some(error) = error.downcast_ref::<tokio_postgres::Error>()
+        && let Some(error) = error.as_db_error()
+    {
+        eprintln!(
+            "scheduled publication database error {}",
+            error.code().code()
+        );
     }
     if db.is_closed() {
         return Err("scheduler database ownership lost".into());

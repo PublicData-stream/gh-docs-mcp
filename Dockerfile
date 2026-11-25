@@ -40,11 +40,13 @@ COPY Cargo.lock Cargo.toml rust-toolchain.toml ./
 COPY apps apps
 COPY crates crates
 COPY migrations migrations
+# Cached artifacts may be newer than the copied workspace sources.
 RUN --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked cargo fetch --locked
 RUN --network=none \
     --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/tmp/rust/target,sharing=locked \
-    cargo build --workspace --bins --release --frozen \
+    find apps crates migrations -type f -exec touch {} + \
+    && cargo build --workspace --bins --release --frozen \
     && mkdir /out \
     && cp /tmp/rust/target/release/gh-docs-serve /tmp/rust/target/release/gh-docs-sync \
           /tmp/rust/target/release/gh-docs-feed /tmp/rust/target/release/gh-docs-git-reader \
@@ -138,7 +140,7 @@ RUN --network=none \
     && cp /tmp/rust/target/release/gh-docs-sync /tmp/rust/target/release/gh-docs-feed \
           /tmp/rust/target/release/gh-docs-serve /out/
 
-FROM phase3-sync AS phase6-sync
+FROM phase2-sync AS phase6-sync
 COPY --from=phase6-fixture-build /out/gh-docs-sync /usr/local/bin/
 
 FROM feed AS phase6-feed

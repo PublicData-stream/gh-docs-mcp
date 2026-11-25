@@ -32,19 +32,29 @@ async fn main() -> Result<()> {
         && repository == "--repository"
         && job == "--job"
     {
-        let lifeline = supervisor::child_lifeline()?;
-        let (client, driver) = connect("gh_docs_sync").await?;
-        let result = gh_docs_sync::reconcile_job(
-            &client,
-            repo.parse()?,
-            control::fixture()?,
-            lifeline,
-            Some(id.parse()?),
-        )
-        .await;
-        drop(client);
-        driver.await?;
-        return result;
+        // Observe ownership loss during connection setup and cleanup as well as
+        // during the Git transfer. The reconcile future reaps its Git group on drop.
+        let lifeline = supervisor::child_lifeline()?.into_std()?;
+        let mut cancelled = tokio::net::UnixStream::from_std(lifeline.try_clone()?)?;
+        let lifeline = tokio::net::UnixStream::from_std(lifeline)?;
+        let reconcile = async {
+            let (client, driver) = connect("gh_docs_sync").await?;
+            let result = gh_docs_sync::reconcile_job(
+                &client,
+                repo.parse()?,
+                control::fixture()?,
+                lifeline,
+                Some(id.parse()?),
+            )
+            .await;
+            drop(client);
+            driver.await?;
+            result
+        };
+        return tokio::select! {
+            result = reconcile => result,
+            _ = supervisor::until_lost(&mut cancelled) => Err("scheduler supervisor disconnected".into()),
+        };
     }
     if let [flag, repository, repo, rest @ ..] = args.as_slice()
         && repository == "--repository"
