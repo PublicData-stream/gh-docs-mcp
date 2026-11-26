@@ -95,6 +95,7 @@ ENTRYPOINT ["/usr/local/bin/gh-docs-feed"]
 
 FROM docker.io/library/postgres:19.0-alpine3.24@sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f AS postgres
 ARG TARGETARCH
+# APK's transaction log embeds wall-clock time in the image layer.
 RUN set -eu; \
     case "$TARGETARCH" in \
         amd64) arch=x86_64; digest=8b37229c4761cf0eef5089045283526ef43bf335073050515010d34a313186ed ;; \
@@ -104,7 +105,7 @@ RUN set -eu; \
     package=/tmp/libxml2-2.13.9-r3.apk; \
     wget -q -O "$package" "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/$arch/${package##*/}"; \
     printf '%s  %s\n' "$digest" "$package" | sha256sum -c -; \
-    apk add --no-network --no-cache "$package"; \
+    apk --no-logfile add --no-network --no-cache "$package"; \
     rm "$package" /usr/local/bin/gosu
 COPY --chmod=755 deploy/postgres-entrypoint.sh /usr/local/bin/gh-docs-postgres-entrypoint
 USER 70:70
