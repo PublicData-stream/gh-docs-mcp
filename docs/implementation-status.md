@@ -963,3 +963,52 @@ lockfiles. OxiBelt provenance and native SBOM verification passed. The
 findings still block release. Scoped Docker and firewall resources were
 removed after the synthetic run. Native arm64, hosted qualification of
 the replacement revision, and GHCR publication remain pending.
+
+### PostgreSQL release image and proxy inventory
+
+The hosted `1.1.0` amd64 and arm64 jobs passed the Rust, repeat build,
+Compose, and restore gates. Both audits reported 26 Go standard-library
+findings in PostgreSQL's `gosu`, one `libxml2` finding, and 17 RustSec
+findings in the OxiBelt workspace lockfile. [amd64 audit evidence](https://github.com/PublicData-stream/gh-docs-mcp/actions/runs/45655773084/artifacts/15046946331) · [arm64 audit evidence](https://github.com/PublicData-stream/gh-docs-mcp/actions/runs/45655773084/artifacts/15046123302)
+
+The PostgreSQL image at revision `e5d4359` keeps the official PostgreSQL
+19.0 Alpine base, updates `libxml2` to `2.13.9-r3`, and removes `gosu`
+from the runnable filesystem. A local Linux amd64 probe confirmed UID/GID
+70, root startup rejection, and zero high or critical findings in Trivy
+`0.76.2`. The candidate reopened a PostgreSQL 19 data directory initialized
+by the previous image and read back a persisted row.
+
+The first independent OCI builds reproduced the three application images.
+The PostgreSQL layer comparison isolated the differing bytes to APK's
+wall-clock transaction log. Revision `35033f0` keeps the transaction
+output in the build log. The full native amd64 repeat build reproduced all
+four runnable manifests. The PostgreSQL manifest was
+`sha256:ee9dffa3bc2b184ee5f670c22c5a20924ffeec50aa522f2907f04c69103901b4`.
+The exact-image audit used Trivy `0.76.2` with the 2026-11-26 07:04 UTC
+database and RustSec revision `b9b8a3c2`. It reported zero high or critical
+PostgreSQL findings and zero RustSec matches in the stamped workspace and
+ripgrep locks. The only release blockers were the 17 OxiBelt workspace
+matches and the incomplete signed proxy inventory.
+
+The exact-image Phase 8 rehearsal passed on rootful Docker `29.10.1`
+and ext4, with Compose `5.8.0` and the pinned Node and pnpm client. It
+restored the matching backup, exercised the previous role binaries and
+database image, then reopened that populated PostgreSQL 19 data directory
+with the candidate image and verified MCP and catalog readback.
+The restricted Phase 7 Minikube smoke on Kubernetes `v1.37.0` used the
+exact amd64 Serve and PostgreSQL manifests. Feed-to-MCP publication and
+framed worker denial checks passed, and the disposable profile was removed.
+
+The offline Rust gate, workflow lint, and all 12 release tests passed,
+including four-image verification and recovery in a loopback registry.
+Compose phases 0, 1, and 3–7 passed in sequence. Phase 2 initially failed
+the global-admission contention probe while the builds were running and
+passed its full isolated retry. The scoped Compose, registry, image, and
+firewall resources were removed. The sanitized reports remain under `/tmp`.
+
+The new proxy gate verified the actual signed OxiBelt `0.10.0` index and
+native SBOM attestations for both architectures and rejected both SBOMs
+for missing compiled Cargo dependency graphs. `0.10.0` was still the
+latest published release on 2026-11-26. Release requires an official
+patched OxiBelt release with complete signed inventories and successful
+native qualification on both architectures. [OxiBelt releases](https://github.com/OxiBelt/OxiBelt/releases)

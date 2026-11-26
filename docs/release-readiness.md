@@ -51,6 +51,15 @@ Release requires matched digests and passed native tests for both platforms,
 a verified independent restore, a reviewed dependency and license
 inventory, and disposition of critical and high audit findings. Assess
 infra findings against the exact image and effective runtime profile.
+A proxy update requires a clean RustSec result for the full released
+OxiBelt workspace lockfile and a signed native CycloneDX inventory from
+the pinned release workflow. The strict data plane application must have
+a reachable Cargo dependency graph, matching name/version entries in the
+released lockfile, and CycloneDX compositions marking dependencies complete
+for the application and each reachable Cargo component. The audit keeps
+the inventory and records why verification failed.
+[CycloneDX compositions](https://cyclonedx.org/docs/1.6/json/#compositions)
+
 A changed pin needs a new build and relevant probes. Record reports from
 the pinned SDK, wire probe, and any other accessible clients individually.
 

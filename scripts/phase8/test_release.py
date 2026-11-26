@@ -1,5 +1,6 @@
 """Regression tests for release source checks and OCI publication."""
 
+from copy import deepcopy
 import json
 import os
 from pathlib import Path
@@ -10,6 +11,7 @@ import tomllib
 import unittest
 from unittest.mock import Mock, patch
 
+import audit
 import images
 import publish
 import release_source as source
@@ -239,6 +241,89 @@ class BundleTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "layout index digest"):
                 publish.publish(registry, assembled, work / "receipt.json", REVISION, VERSION)
             self.assertEqual(registry.mock_calls, [])
+
+
+class ProxyInventoryTests(unittest.TestCase):
+    def setUp(self):
+        self.lock = {"package": [{"name": "rustls", "version": "0.23.46"}]}
+        self.inventory = {
+            "bomFormat": "CycloneDX",
+            "specVersion": "1.6",
+            "version": 1,
+            "metadata": {"component": {"bom-ref": "image", "name": "strict-amd64", "type": "container"}},
+            "components": [
+                {"bom-ref": "app", "name": audit.PROXY_PACKAGE, "type": "application"},
+                {"bom-ref": "tls", "name": "rustls", "type": "library", "version": "0.23.46",
+                 "purl": "pkg:cargo/rustls@0.23.46"},
+            ],
+            "dependencies": [
+                {"ref": "image", "dependsOn": ["app"]},
+                {"ref": "app", "dependsOn": ["tls"]},
+            ],
+            "compositions": [{"aggregate": "complete", "dependencies": ["app", "tls"]}],
+        }
+
+    def test_requires_an_attested_graph_matching_the_released_lock(self):
+        audit.validate_proxy_inventory(self.inventory, self.lock)
+        application_only = {
+            **self.inventory,
+            "components": self.inventory["components"][:1],
+            "dependencies": self.inventory["dependencies"][:1],
+        }
+        disconnected = {**self.inventory, "dependencies": [
+            {"ref": "image", "dependsOn": ["app", "tls"]},
+        ]}
+        dangling = {**self.inventory, "dependencies": [
+            *self.inventory["dependencies"],
+            {"ref": "tls", "dependsOn": ["missing"]},
+        ]}
+        partial = {**self.inventory, "compositions": [{"aggregate": "complete", "dependencies": ["app"]}]}
+        for inventory, lock, reason in (
+            (application_only, self.lock, "lacks a compiled Cargo dependency graph"),
+            (disconnected, self.lock, "lacks a compiled Cargo dependency graph"),
+            (dangling, self.lock, "unresolved dependency references"),
+            (partial, self.lock, "dependency graph complete"),
+            (self.inventory, {"package": []}, "outside the released lockfile"),
+        ):
+            with self.subTest(reason=reason), self.assertRaisesRegex(ValueError, reason):
+                audit.validate_proxy_inventory(inventory, lock)
+        altered = deepcopy(self.inventory)
+        altered["components"][1]["version"] = "0.23.45"
+        with self.assertRaisesRegex(ValueError, "conflicting Cargo component identities"):
+            audit.validate_proxy_inventory(altered, self.lock)
+
+    def test_attestation_binds_graph_to_native_image_and_release_workflow(self):
+        index = "a" * 64
+        native = "b" * 64
+        other = "c" * 64
+        ref = f"ghcr.io/oxibelt/oxibelt-dataplane-strict:0.10.0-alpine-musl@sha256:{index}"
+        workflow = "https://github.com/OxiBelt/OxiBelt/.github/workflows/release-image-arch.yml@refs/tags/0.10.0"
+        manifest = {"manifests": [{"platform": {"os": "linux", "architecture": "amd64"},
+                                   "digest": f"sha256:{native}"}]}
+
+        def verified(*args, stdout, timeout):
+            self.assertIn(audit.OXIBELT_REVISION, args)
+            self.assertIn("refs/tags/0.10.0", args)
+            is_index = args[3] == f"oci://{ref}"
+            subject = index if is_index else sbom_subject
+            signer = workflow if is_index else sbom_signer
+            json.dump([{"verificationResult": {
+                "signature": {"certificate": {"subjectAlternativeName": signer}},
+                "statement": {"predicateType": args[args.index("--predicate-type") + 1],
+                              "subject": [{"digest": {"sha256": subject}}], "predicate": self.inventory},
+            }}], stdout)
+
+        with (tempfile.TemporaryDirectory(dir="/tmp", prefix="ghdocs-proxy-inventory-") as temporary,
+              patch.object(audit, "architecture", return_value="amd64"),
+              patch.object(audit.subprocess, "check_output", return_value=json.dumps(manifest)),
+              patch.object(audit, "run", side_effect=verified)):
+            out = Path(temporary)
+            sbom_subject, sbom_signer = native, workflow
+            audit.proxy_sbom(ref, out, self.lock)
+            self.assertEqual(json.loads((out / "proxy-upstream-sbom.json").read_bytes()), self.inventory)
+            for sbom_subject, sbom_signer in ((other, workflow), (native, workflow.replace("release-image-arch", "ci"))):
+                with self.subTest(digest=sbom_subject, signer=sbom_signer), self.assertRaises(StopIteration):
+                    audit.proxy_sbom(ref, out, self.lock)
 
 
 @unittest.skipUnless(os.environ.get("GH_DOCS_TEST_LOOPBACK") == "1", "requires Docker and Skopeo")

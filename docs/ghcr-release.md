@@ -77,8 +77,9 @@ and corresponding-source review. [Docker Official Image source](https://github.c
 
 ## Recover a partial publication
 
-If source verification failed for a published immutable release, use a new
-eligible version for the corrected commit and run preflight before publishing.
+If source verification or qualification requires a change to a published
+immutable release's source, use a new eligible version for the corrected
+commit and run preflight before publishing.
 
 Rerun failed jobs while the original qualified bundle is still available.
 This reuses the exact artifact ID. Each version tag is accepted only if
