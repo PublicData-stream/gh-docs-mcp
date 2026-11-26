@@ -1012,3 +1012,31 @@ for missing compiled Cargo dependency graphs. `0.10.0` was still the
 latest published release on 2026-11-26. Release requires an official
 patched OxiBelt release with complete signed inventories and successful
 native qualification on both architectures. [OxiBelt releases](https://github.com/OxiBelt/OxiBelt/releases)
+
+## Routine GitHub Actions CI
+
+[CI](../.github/workflows/ci.yml) runs the pinned Rust and release-helper
+checks, workflow lint, and synthetic Docker Compose Phases 0 and 5 on every
+push, pull request, and manual dispatch. The Compose jobs use native Linux
+amd64 and arm64 runners. Select `full_compose` when dispatching the workflow
+to run Phases 0–7 on both architectures. Failed Compose jobs attach the
+available host, build, and phase logs for seven days.
+
+Release preflight checks the entire canonical main push run and the `rust`
+job for the exact tagged commit. Release candidate qualification exercises
+the separate repeat build, restore, and audit gates.
+
+On 2026-11-26, the CI changes based on `367c17ba4dac` passed the Rust
+`1.100.0` offline gate, checksum-verified actionlint `1.17.1`, and the
+offline release-helper suite. Eleven release-helper tests passed and the
+opt-in loopback registry test was skipped. ShellCheck passed for both
+Compose helpers.
+
+The routine selection passed Phases 0 and 5, and the full selection
+passed Phases 0–7, including the Phase 2 global-admission contention
+probe. The local profile was Linux amd64, kernel `7.0.0-44-generic`,
+rootful Docker `29.10.1`, Compose `5.8.0`, and ext4-backed `/tmp`.
+The SDK fixture used Node `26.13.1` and pnpm `12.23.0`. A missing-image
+run returned failure and produced diagnostics for both requested phases.
+Fixture tags, Compose resources, firewall rules, and generated fixture
+directories were removed. The new hosted CI matrix is pending its first run.

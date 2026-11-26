@@ -1,9 +1,21 @@
-name: Phase 0 Rust checks
+name: CI
 
-on: [push, pull_request, workflow_dispatch]
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      full_compose:
+        description: Run Compose phases 0 through 7
+        type: boolean
+        default: false
 
 permissions:
   contents: read
+
+defaults:
+  run:
+    shell: bash
 
 jobs:
   rust:
@@ -26,3 +38,124 @@ jobs:
         run: |
           python3 -B scripts/phase8/release_version.py
           python3 -B -m unittest discover -s scripts/phase8 -p test_release.py
+
+  workflow-lint:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Lint GitHub Actions workflows
+        run: |
+          work=$(mktemp -d /tmp/ghdocs-actionlint.XXXXXXXX)
+          trap 'rm -rf -- "$work"' EXIT
+          curl --fail --silent --show-error --location --retry 3 \
+            https://github.com/kjanat/actionlint/releases/download/v1.17.1/actionlint_1.17.1_linux_amd64.tar.gz \
+            -o "$work/actionlint.tar.gz"
+          printf '%s  %s\n' 6bfe0f49f0e108b9b23732baf7de63bfa4d89174fa40f9cb98feb9676df3318f \
+            "$work/actionlint.tar.gz" | sha256sum --check
+          tar -xzf "$work/actionlint.tar.gz" -C "$work" actionlint
+          "$work/actionlint"
+
+  docker-e2e:
+    name: Docker E2E (${{ matrix.arch }})
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-26.04
+            machine: x86_64
+          - arch: arm64
+            runner: ubuntu-26.04-arm
+            machine: aarch64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 75
+    env:
+      TMPDIR: /tmp
+      FIXTURE_TAG: ci-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.arch }}
+      FULL_COMPOSE: ${{ github.event_name == 'workflow_dispatch' && inputs.full_compose }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Create a disposable work directory
+        run: |
+          work=$(mktemp -d /tmp/ghdocs-ci.XXXXXXXX)
+          mkdir "$work/logs"
+          echo "CI_WORK_DIR=$work" >> "$GITHUB_ENV"
+      - name: Prepare the native Compose host
+        env:
+          EXPECTED_MACHINE: ${{ matrix.machine }}
+        run: |
+          {
+            git rev-parse HEAD
+            uname -a
+            findmnt -n -o FSTYPE -T /tmp
+            docker --context default version
+            docker --context default compose version
+            docker --context default buildx version
+            test "$(uname -m)" = "$EXPECTED_MACHINE"
+            test "$(findmnt -n -o FSTYPE -T /tmp | head -n 1)" = ext4
+            security_options=$(docker --context default info --format '{{json .SecurityOptions}}')
+            [[ "$security_options" != *name=rootless* ]]
+            sudo -n apt-get update
+            sudo -n apt-get install -y nftables python3-jsonschema
+          } 2>&1 | tee "$CI_WORK_DIR/logs/host.log"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: 26.13.1
+      - uses: pnpm/setup@731dfb6463bbd11c11fd0ee11fe00ed0e36d48a1 # v3.2.0
+        env:
+          XDG_CACHE_HOME: ${{ env.CI_WORK_DIR }}/cache
+        with:
+          working-directory: scripts/phase0/client
+          dest: ${{ env.CI_WORK_DIR }}/pnpm
+          install: 'false'
+      - name: Prepare the locked SDK fixture and build native images
+        env:
+          XDG_CACHE_HOME: ${{ env.CI_WORK_DIR }}/cache
+          pnpm_config_store_dir: ${{ env.CI_WORK_DIR }}/pnpm-store
+        run: |
+          {
+            node --version
+            pnpm --version
+            client=$(scripts/phase0/prepare-client.sh)
+            echo "CI_CLIENT_DIR=$client" >> "$GITHUB_ENV"
+            pins=$(PYTHONPATH=scripts/phase8 python3 -B -c \
+              'from pins import infrastructure; p = infrastructure(); print(p["initializer"], p["fixture-proxy"], sep="\n")')
+            while IFS= read -r image; do
+              docker --context default pull "$image"
+            done <<< "$pins"
+            build_args=(--current-only)
+            if [[ "$FULL_COMPOSE" != true ]]; then
+              build_args+=(--smoke)
+            fi
+            scripts/phase8/fixtures.sh "$FIXTURE_TAG" "${build_args[@]}"
+          } 2>&1 | tee "$CI_WORK_DIR/logs/build.log"
+      - name: Run the synthetic Compose probes
+        run: |
+          phases=(0 5)
+          if [[ "$FULL_COMPOSE" == true ]]; then
+            phases=({0..7})
+          fi
+          scripts/phase8/qualify.sh "$FIXTURE_TAG" "$CI_WORK_DIR/logs" \
+            "$(command -v node)" "$CI_CLIENT_DIR" "${phases[@]}"
+      - name: Remove disposable client and fixture image tags
+        if: ${{ always() && env.CI_WORK_DIR != '' }}
+        run: |
+          if [[ ${CI_CLIENT_DIR:-} == /tmp/gh-docs-client.* ]]; then
+            rm -rf -- "$CI_CLIENT_DIR"
+          fi
+          docker --context default image ls --filter "reference=gh-docs-*:$FIXTURE_TAG" \
+            --format '{{.Repository}}:{{.Tag}}' | xargs -r docker --context default image rm
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: ${{ failure() && env.CI_WORK_DIR != '' }}
+        with:
+          name: docker-e2e-${{ matrix.arch }}-${{ github.run_attempt }}
+          path: ${{ env.CI_WORK_DIR }}/logs/*.log
+          retention-days: 7
+      - name: Remove disposable work directory
+        if: ${{ always() && env.CI_WORK_DIR != '' }}
+        run: rm -rf -- "$CI_WORK_DIR"
