@@ -10,7 +10,7 @@ import subprocess
 import tempfile
 
 from backup import sha256
-from images import DOCKER, architecture, load_native, run, write_json
+from images import APP_ROLES, DOCKER, architecture, load_native, run, write_json
 from pins import infrastructure
 from release_version import CARGO_INPUTS, cargo_digests, stage_source
 
@@ -95,7 +95,7 @@ def exact_images(bundle, out, tag, work):
         candidates = {**refs, **infra}
         write_json(out / "images.json", candidates)
         for role, ref in candidates.items():
-            if role in refs:
+            if role in APP_ROLES:
                 run(*DOCKER, "run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL",
                     "--security-opt", "no-new-privileges", "--entrypoint", "/bin/sh", ref, "-ec",
                     "test -f /usr/share/licenses/gh-docs-mcp/LICENSE; "
@@ -103,6 +103,15 @@ def exact_images(bundle, out, tag, work):
                     "for tool in cargo rustc make gcc python3 node pnpm; do ! command -v \"$tool\" || exit 1; done; "
                     "test -z \"$(find /usr/local/bin -name '*fixture*')\"; "
                     "test ! -e /run/secrets && test ! -e /src")
+            if role == "postgres":
+                options = (*DOCKER, "run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL",
+                           "--security-opt", "no-new-privileges")
+                run(*options, ref, "/bin/sh", "-ec",
+                    'test "$(id -u):$(id -g)" = 70:70; test ! -e /usr/local/bin/gosu; '
+                    'postgres --version')
+                root = subprocess.run([*options, "--user", "0:0", ref], capture_output=True, text=True)
+                if root.returncode != 1 or root.stderr.strip() != "PostgreSQL requires UID and GID 70":
+                    raise ValueError("PostgreSQL image did not reject root startup")
             saved = work / "image.tar"
             # Use an image tag so the archive contains an explicit Docker reference.
             name = f"gh-docs-mcp-{role}:{tag}" if role in refs else ref

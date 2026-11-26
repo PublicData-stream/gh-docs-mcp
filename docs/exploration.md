@@ -173,11 +173,11 @@ python3 -B scripts/phase4/minikube.py \
   --serve-image "gh-docs-phase4-serve:$tag" \
   --sync-image "gh-docs-phase3-sync:$tag" \
   --upstream-image "gh-docs-phase2-upstream:$tag" \
-  --postgres-image "gh-docs-phase4-postgres:$tag" \
+  --postgres-image "gh-docs-mcp-postgres:$tag" \
   --bootstrap-cache "$bootstrap_cache"
 ~~~
 
-Tag the same pinned PostgreSQL image for Minikube as in Phase 3. Use the
+Use the same local PostgreSQL image for Minikube as in Phase 3. Use the
 rootless Docker profile with its disposable state and kubeconfig under
 `/tmp`. Compose exercises SQL grants, policy changes, object oracles,
 and retention. The Minikube Job checks both Git formats with the same

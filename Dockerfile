@@ -93,6 +93,24 @@ COPY --from=app-build /out/gh-docs-feed /usr/local/bin/
 USER 10003:10003
 ENTRYPOINT ["/usr/local/bin/gh-docs-feed"]
 
+FROM docker.io/library/postgres:19.0-alpine3.24@sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f AS postgres
+ARG TARGETARCH
+RUN set -eu; \
+    case "$TARGETARCH" in \
+        amd64) arch=x86_64; digest=8b37229c4761cf0eef5089045283526ef43bf335073050515010d34a313186ed ;; \
+        arm64) arch=aarch64; digest=3e12146a2f15e27a22d70d21f8f52be29966105ce304c55bab2bfe75604981a9 ;; \
+        *) exit 1 ;; \
+    esac; \
+    package=/tmp/libxml2-2.13.9-r3.apk; \
+    wget -q -O "$package" "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/$arch/${package##*/}"; \
+    printf '%s  %s\n' "$digest" "$package" | sha256sum -c -; \
+    apk add --no-network --no-cache "$package"; \
+    rm "$package" /usr/local/bin/gosu
+COPY --chmod=755 deploy/postgres-entrypoint.sh /usr/local/bin/gh-docs-postgres-entrypoint
+USER 70:70
+ENTRYPOINT ["/usr/local/bin/gh-docs-postgres-entrypoint"]
+CMD ["postgres"]
+
 FROM app-build AS phase1-fixture-build
 RUN --network=none \
     --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \

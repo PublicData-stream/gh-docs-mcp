@@ -25,10 +25,10 @@ for role in serve sync feed; do
         --platform "linux/$arch" --load --target "$role" \
         -t "gh-docs-mcp-$role:$previous" "${args[@]}" "$work/previous"
 done
-for role in serve sync feed phase1-serve phase1-sync phase2-sync phase2-upstream \
+for role in serve sync feed postgres phase1-serve phase1-sync phase2-sync phase2-upstream \
             phase3-serve phase3-sync phase4-serve phase6-serve phase6-sync phase6-feed; do
     prefix=gh-docs
-    case "$role" in serve|sync|feed) prefix=gh-docs-mcp ;; esac
+    case "$role" in serve|sync|feed|postgres) prefix=gh-docs-mcp ;; esac
     docker --context default buildx build --network host --allow network.host \
         --platform "linux/$arch" --load --target "$role" \
         -t "$prefix-$role:$tag" "${args[@]}" .

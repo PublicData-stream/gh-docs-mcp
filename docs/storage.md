@@ -114,7 +114,7 @@ scripts/phase0/check-rust.sh
 client_dir=$(scripts/phase0/prepare-client.sh)
 tag=phase1-local
 
-for target in serve sync feed phase1-serve phase1-sync; do
+for target in serve sync feed postgres phase1-serve phase1-sync; do
   case "$target" in
     phase1-*) image="gh-docs-$target" ;;
     *) image="gh-docs-mcp-$target" ;;

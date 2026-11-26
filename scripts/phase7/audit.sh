@@ -53,12 +53,10 @@ if [[ -z ${PHASE7_TRIVY_DB:-} ]]; then
 fi
 scan version --format json > "$out/trivy-version.json"
 
-postgres=$(sed -n 's/^    image: \(docker\.io\/library\/postgres:.*\)$/\1/p' compose.yml)
 proxy=$(sed -n 's/^    image: &proxy-image \(docker\.io\/library\/nginx:.*\)$/\1/p' compose.yml)
 initializer=$(sed -n 's/^    image: \(docker\.io\/library\/alpine:.*\)$/\1/p' compose.yml)
 for role in serve sync feed postgres proxy initializer; do
     case "$role" in
-        postgres) image=$postgres ;;
         proxy) image=$proxy ;;
         initializer) image=$initializer ;;
         *) image=gh-docs-mcp-$role:$tag ;;

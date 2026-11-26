@@ -114,7 +114,7 @@ at private verification.
 
 ## Qualification
 
-Build uniquely tagged local images for `serve`, `sync`, `feed`,
+Build uniquely tagged local images for `serve`, `sync`, `feed`, `postgres`,
 `phase1-serve`, `phase1-sync`, `phase2-sync`, and `phase2-upstream`. Run the
 offline gate and Phase 0 and Phase 1 probes, then use the same local tag for
 the Phase 2 suites. [Deployment prerequisites](deployment-prerequisites.md) ·
@@ -125,12 +125,12 @@ sudo -n python3 -B scripts/phase2/integration.py --image-tag "$tag"
 python3 -B scripts/phase2/minikube.py \
   --sync-image "gh-docs-phase2-sync:$tag" \
   --upstream-image "gh-docs-phase2-upstream:$tag" \
-  --postgres-image "gh-docs-phase2-postgres:$tag" \
+  --postgres-image "gh-docs-mcp-postgres:$tag" \
   --bootstrap-cache "$bootstrap_cache"
 ~~~
 
-The PostgreSQL alias must refer to the exact Compose base image. The Minikube
-Job uses locally loaded images and a disposable rootless profile. Both
+Minikube uses the same local PostgreSQL image as Compose. The Job uses
+locally loaded images and a disposable rootless profile. Both
 harnesses keep fixture inputs under `/tmp`.
 
 [Source approval decision](decisions/0004-source-approval.md)

@@ -18,6 +18,10 @@ services:
   migrate:
     image: "${GH_DOCS_SYNC_IMAGE:?Use the qualified release receipt}"
 
+  postgres:
+    image: "${GH_DOCS_POSTGRES_IMAGE:?Use the qualified release receipt}"
+    build: !reset null
+
   proxy:
     image: ghcr.io/oxibelt/oxibelt-dataplane-strict:0.10.0-alpine-musl@sha256:fcdbb89f35bf64b960ed3b11c3f218535d26577bee4ddc625a082e3138bb2d6d
     user: "10001:10001"

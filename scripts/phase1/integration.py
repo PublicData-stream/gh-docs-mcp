@@ -311,7 +311,7 @@ def main():
     print(RUN(["git", "-c", f"safe.directory={ROOT}", "rev-parse", "HEAD"]).stdout.strip(), flush=True)
     print(RUN([*DOCKER, "version", "--format", "{{.Server.Version}} {{.Server.Arch}}"]).stdout.strip(), flush=True)
     print(RUN([*DOCKER, "compose", "version"]).stdout.strip(), flush=True)
-    images = [f"gh-docs-mcp-{name}:{args.image_tag}" for name in ("serve", "sync", "feed")]
+    images = [f"gh-docs-mcp-{name}:{args.image_tag}" for name in ("serve", "sync", "feed", "postgres")]
     images += [f"gh-docs-phase1-{name}:{args.image_tag}" for name in ("serve", "sync")]
     print(RUN([*DOCKER, "image", "inspect", "--format", "{{.Id}} {{join .RepoTags \", \"}}", *images]).stdout,
           end="", flush=True)

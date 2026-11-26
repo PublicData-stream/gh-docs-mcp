@@ -212,11 +212,11 @@ python3 -B scripts/phase6/minikube.py \
   --sync-image "gh-docs-phase6-sync:$tag" \
   --feed-image "gh-docs-phase6-feed:$tag" \
   --upstream-image "gh-docs-phase2-upstream:$tag" \
-  --postgres-image "gh-docs-phase6-postgres:$tag" \
+  --postgres-image "gh-docs-mcp-postgres:$tag" \
   --bootstrap-cache "$bootstrap_cache"
 ~~~
 
-The PostgreSQL alias must refer to the pinned Compose image. The Minikube
+Minikube uses the same local PostgreSQL image as Compose. The Minikube
 smoke delays scheduled reconciliation so the first publication must follow
 an authenticated feed hint. It exercises delivery and MCP reading on pod
 loopback. Compose qualifies effective role networking and fault recovery.

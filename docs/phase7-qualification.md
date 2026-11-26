@@ -71,12 +71,12 @@ python3 -B scripts/phase7/minikube.py \
   --sync-image "gh-docs-phase6-sync:$tag" \
   --feed-image "gh-docs-phase6-feed:$tag" \
   --upstream-image "gh-docs-phase2-upstream:$tag" \
-  --postgres-image "gh-docs-phase7-postgres:$tag" \
+  --postgres-image "gh-docs-mcp-postgres:$tag" \
   --bootstrap-cache "$bootstrap_cache"
 ~~~
 
-Set `receipt` to a fresh directory under `/tmp`. Use a local alias of
-the digest-pinned PostgreSQL image. The disposable Restricted smoke uses
+Set `receipt` to a fresh directory under `/tmp`. Use the same local
+PostgreSQL image as Compose. The disposable Restricted smoke uses
 pod loopback, proves feed-to-MCP publication and checks framed worker
 denials. Compose supplies the network and role-boundary evidence.
 

@@ -50,24 +50,30 @@ To rebuild, pass the same revision and full version to
    versioned indexes after qualification. A tag push or a draft release
    alone does not start publication.
 
-The workflow links the three packages to this repository through their OCI
+The workflow links the four packages to this repository through their OCI
 source label. New packages start private. A package admin makes each
 package public, then reruns the failed anonymous verification job. If a
 package already exists, its Actions access must allow this repository to
 publish. Public verification downloads both platforms and their
 attestations with an empty credential file. A stable release also sets
-`:latest` after all three anonymous downloads pass. [GitHub package visibility and Actions access](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility)
+`:latest` after all four anonymous verifications pass. [GitHub package visibility and Actions access](https://docs.github.com/en/packages/learn-github-packages/configuring-a-packages-access-control-and-visibility)
 
 | Package in `ghcr.io/publicdata-stream` | Compose variable |
 | --- | --- |
 | `gh-docs-mcp-serve` | `GH_DOCS_SERVE_IMAGE` |
 | `gh-docs-mcp-sync` | `GH_DOCS_SYNC_IMAGE` |
 | `gh-docs-mcp-feed` | `GH_DOCS_FEED_IMAGE` |
+| `gh-docs-mcp-postgres` | `GH_DOCS_POSTGRES_IMAGE` |
 
-Use all three digest-pinned references from the workflow summary or the
+Use all four digest-pinned references from the workflow summary or the
 `ghcr-release-digests.json` artifact together. The receipt also records the
 source revision, release version, and runnable manifest digest for each
 platform. See the [Compose deployment procedure](deployment.md).
+
+The PostgreSQL image derives from the official PostgreSQL 19.0 Alpine 3.24
+image, updates `libxml2` from signed Alpine packages, and runs as UID/GID 70.
+Include the upstream base layers and their notices in the release's license
+and corresponding-source review. [Docker Official Image source](https://github.com/docker-library/postgres/tree/8672300fdf4f4ce8a8eac7511031fd08b6d2c886/19/alpine3.24) · [PostgreSQL license](https://www.postgresql.org/about/licence/) · [Alpine libxml2 source and license](https://pkgs.alpinelinux.org/package/v3.24/main/x86_64/libxml2)
 
 ## Recover a partial publication
 
@@ -82,7 +88,7 @@ bundle cannot be recovered or a tag points to different bytes, use a new
 eligible release version for a changed index. Keep package tag writes
 within the publishing workflow.
 
-GHCR updates the three `:latest` aliases individually. After a partial
+GHCR updates the four `:latest` aliases individually. After a partial
 promotion, rerun promotion for the highest successfully verified stable
 release. The workflow fills or updates aliases still on older versions and
 skips the entire promotion if any alias is already on a higher stable

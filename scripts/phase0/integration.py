@@ -364,7 +364,7 @@ def main():
     try:
         stack = Stack(root, project, image_tag, mcp_fixture=True)
         if not args.skip_build:
-            for role in ("serve", "sync", "feed"):
+            for role in ("serve", "sync", "feed", "postgres"):
                 image = f"gh-docs-mcp-{role}:{image_tag}"
                 build = [
                     *DOCKER, "buildx", "build", "--network", "host", "--platform", "linux/amd64",

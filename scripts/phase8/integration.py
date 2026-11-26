@@ -24,6 +24,7 @@ import time
 import backup
 import edge
 import images
+from pins import PREVIOUS_POSTGRES
 
 
 ROOT = images.ROOT
@@ -54,6 +55,7 @@ def release_stack(tag, refs, *, previous=False):
         overlay = root / "previous.json"
         roles = {role: {"image": ref} for role, ref in refs.items()}
         roles["migrate"] = {"image": refs["sync"]}
+        roles["postgres"] = {"image": "${GH_DOCS_POSTGRES_IMAGE:?}"}
         overlay.write_text(json.dumps({"services": roles}))
     else:
         stack.mcp_host = "localhost"
@@ -373,7 +375,8 @@ def rehearse(args, refs, work, version):
         for repo, record in records.items():
             assert wire.resolve(repo)["commit_oid"] == record[6]["context"]["commit_oid"]
     # Restore the same pre-upgrade state under the Phase 7 role binaries.
-    previous = {role: f"gh-docs-mcp-{role}:{args.previous_tag}" for role in images.ROLES}
+    previous = {role: f"gh-docs-mcp-{role}:{args.previous_tag}" for role in images.APP_ROLES}
+    previous["postgres"] = PREVIOUS_POSTGRES
     with release_stack(args.fixture_tag, previous, previous=True) as (target, project, _):
         try:
             backup.restore(project, project.store(), bundle, digest)
@@ -383,8 +386,16 @@ def rehearse(args, refs, work, version):
             check_readback(wire, records, rotate=True)
         finally:
             target.compose("stop", "proxy", "feed", "serve", "sync")
+        # Reopen the populated PostgreSQL 19 data directory with the new runtime.
+        target.compose("stop", "postgres")
+        target.context["GH_DOCS_POSTGRES_IMAGE"] = refs["postgres"]
+        target.compose("up", "--no-build", "--pull", "never", "--force-recreate", "--wait",
+                       "--wait-timeout", "130", "postgres", timeout=145)
+        open_stack(target)
+        check_readback(wire, records, rotate=True)
+        print("PostgreSQL image upgrade reopened the previous runtime's data directory", flush=True)
     return {"backup": captured, "restore": restored, "load": measured,
-            "completed_utc": datetime.now(timezone.utc).isoformat()}
+            "postgres_upgrade": "pass", "completed_utc": datetime.now(timezone.utc).isoformat()}
 
 
 def main():

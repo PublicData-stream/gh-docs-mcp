@@ -11,7 +11,6 @@ scripts/phase0/check-rust.sh
 
 client_dir=$(scripts/phase0/prepare-client.sh)
 docker --context default pull docker.io/library/alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf
-docker --context default pull docker.io/library/postgres:19.0-alpine3.24@sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f
 docker --context default pull docker.io/library/nginx:1.30.0-alpine@sha256:0272e4604ed93c1792f03695a033a6e8546840f86e0de20a884bb17d2c924883
 
 set -o pipefail
@@ -19,7 +18,7 @@ sudo -n python3 -B scripts/phase0/integration.py --node "$(command -v node)" --c
   2>&1 | tee /tmp/gh-docs-phase0-integration.log
 ```
 
-The harness builds the three exact service images. Build-time downloads use host networking. Git, ripgrep, and workspace compilation run with networking disabled. Application runtime networks are created for one disposable Compose project, with temporary data, certificates, and secrets under `/tmp`. The harness verifies that every pinned image is present before it creates project resources. It installs nftables rules before starting services and stops the project before deleting its rules. Use the harness to start the Phase 0 stack so the egress policy is in effect.
+The harness builds Serve, Sync, Feed, and PostgreSQL. Build-time downloads use host networking. Git, ripgrep, and workspace compilation run with networking disabled. Application runtime networks are created for one disposable Compose project, with temporary data, certificates, and secrets under `/tmp`. The harness verifies that every selected image is present before it creates project resources. It installs nftables rules before starting services and stops the project before deleting its rules. Use the harness to start the Phase 0 stack so the egress policy is in effect.
 
 The private topology uses separate ingress, database read and write, notification, feed-control, and sync/feed egress bridges. The positive egress cases are the synthetic sink on the approved addresses and port. The proxy publishes one port on host loopback. PostgreSQL binds both database interfaces and uses the private Unix socket for provisioning. Its certificate and private key are supplied separately from app and migration credentials.
 

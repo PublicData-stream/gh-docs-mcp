@@ -196,6 +196,23 @@ def seal(assembled):
 
 
 class BundleTests(unittest.TestCase):
+    def test_assembly_requires_the_qualified_postgres_manifest(self):
+        with tempfile.TemporaryDirectory(dir="/tmp", prefix="ghdocs-release-test-") as temporary:
+            work = Path(temporary) / "input"
+            bundle(work, REVISION, VERSION)
+            native = work / "arm64"
+            build = json.loads((native / "receipt.json").read_bytes())
+            gate = json.loads((native / "qualification.json").read_bytes())
+            del gate["images"]["postgres"]
+            images.write_json(native / "qualification.json", gate)
+            with self.assertRaisesRegex(ValueError, "qualification receipt is missing"):
+                images.assemble(work / "amd64", native, work / "missing-postgres")
+            gate["images"]["postgres"] = build["images"]["postgres"] = f"sha256:{'d' * 64}"
+            images.write_json(native / "qualification.json", gate)
+            images.write_json(native / "receipt.json", build)
+            with self.assertRaisesRegex(ValueError, "does not match the qualified manifest"):
+                images.assemble(work / "amd64", native, work / "wrong-postgres")
+
     def test_assembly_rejects_different_stamped_inputs(self):
         with tempfile.TemporaryDirectory(dir="/tmp", prefix="ghdocs-release-test-") as temporary:
             work = Path(temporary) / "input"
@@ -260,6 +277,7 @@ class RegistryTests(unittest.TestCase):
             self.assertIsNone(registry.manifest(f"{host}/gh-docs-mcp-sync:{VERSION}", missing=True))
             publish.publish(registry, assembled, receipt, REVISION, VERSION)
             stable = json.loads(receipt.read_bytes())["images"]
+            self.assertEqual(set(stable), {"serve", "sync", "feed", "postgres"})
             with patch.object(registry, "copy", wraps=copy) as copied:
                 publish.publish(registry, assembled, receipt, REVISION, VERSION)
                 copied.assert_not_called()

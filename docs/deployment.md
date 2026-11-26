@@ -7,9 +7,10 @@ amd64. See the [release gate](release-readiness.md) for qualification status.
 
 ## Provision and start
 
-1. Use three matching image digests from the release receipt. Set
-   `GH_DOCS_SERVE_IMAGE`, `GH_DOCS_SYNC_IMAGE`, and `GH_DOCS_FEED_IMAGE` to the full
-   registry references with `@sha256:<index digest>`. Set
+1. Use four matching image digests from the release receipt. Set
+   `GH_DOCS_SERVE_IMAGE`, `GH_DOCS_SYNC_IMAGE`, `GH_DOCS_FEED_IMAGE`, and
+   `GH_DOCS_POSTGRES_IMAGE` to the full registry references with
+   `@sha256:<index digest>`. Set
    `GH_DOCS_MCP_AUTHORITY` to the TLS name and port used by clients.
    The overlay trusts only the dedicated OxiBelt ingress IP. Serve verifies
    the normalized hostname, effective TLS port and scheme from that peer
@@ -22,7 +23,8 @@ amd64. See the [release gate](release-readiness.md) for qualification status.
    The private candidate allows approved synthetic endpoints only.
 3. Provision `store`, `staging`, and `pgdata` as distinct bind directories on
    the qualified filesystem. Run the networkless `volume-admin` once on fresh
-   volumes. Provision database SCRAM passwords, TLS materials with the
+   volumes. PostgreSQL starts as UID/GID 70 and requires the data and socket
+   directories to be writable by that identity. Provision database SCRAM passwords, TLS materials with the
    `postgres.phase0.test` server SAN, and the role-scoped secrets described in
    [deployment prerequisites](deployment-prerequisites.md). Give the
    OxiBelt certificate and key to UID 10001 in the separate proxy directory.

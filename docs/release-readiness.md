@@ -36,9 +36,9 @@ private directory under `/tmp` containing Cargo's `index` and `cache`.
 Pass that directory as `--seed` to `images.py` and as
 `GH_DOCS_RELEASE_SEED` to `fixtures.sh`. Cargo still validates the lockfiles.
 
-For Minikube, tag the pinned PostgreSQL image as a disposable local name and
-run `scripts/phase7/minikube.py` with the prepared serve, Phase 6 sync/feed,
-Phase 2 upstream, and PostgreSQL images. The harness gives its rootless
+For Minikube, run `scripts/phase7/minikube.py` with the prepared serve,
+Phase 6 sync/feed, Phase 2 upstream, and Compose PostgreSQL image.
+The harness gives its rootless
 cluster a private kubeconfig and home under `/tmp` and deletes the profile
 on exit. Follow the [Phase 7 command](phase7-qualification.md#local-procedure).
 Use `--image-load-timeout 420` when the local image import needs a longer bound.

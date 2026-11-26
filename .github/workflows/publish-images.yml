@@ -55,7 +55,7 @@ jobs:
       version: ${{ needs.source.outputs.version }}
 
   publish:
-    name: Publish the three versioned OCI indexes
+    name: Publish the four versioned OCI indexes
     needs: [source, qualify]
     runs-on: ubuntu-26.04
     timeout-minutes: 25

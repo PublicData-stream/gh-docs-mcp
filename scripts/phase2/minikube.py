@@ -16,7 +16,6 @@ from smart_fixtures import REPOS, approval, prepare, run
 
 
 ROOT = Path(__file__).resolve().parents[2]
-POSTGRES = "docker.io/library/postgres:19.0-alpine3.24@sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f"
 NAMESPACE = "gh-docs-phase2"
 
 
@@ -115,7 +114,7 @@ def resources(root, sync, upstream, postgres, serve=None, *, explore=False, wire
         container("postgres", postgres, 70, ["/bin/sh", "-ec",
             "umask 077; cp /run/secrets/server.key /run/postgresql/server.key; "
             "chmod 600 /run/postgresql/server.key; "
-            "exec docker-entrypoint.sh postgres -c listen_addresses=127.0.0.1 "
+            "exec gh-docs-postgres-entrypoint postgres -c listen_addresses=127.0.0.1 "
             "-c ssl=on -c ssl_cert_file=/run/secrets/server.crt -c ssl_key_file=/run/postgresql/server.key"],
             [mount("postgres-auth", "/run/secrets", True), mount("pgdata", "/pgdata"),
              mount("postgres-run", "/run/postgresql"),
@@ -319,6 +318,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sync-image", required=True)
     parser.add_argument("--upstream-image", required=True)
-    parser.add_argument("--postgres-image", required=True, help=f"local alias of {POSTGRES}")
+    parser.add_argument("--postgres-image", required=True, help="local gh-docs-mcp-postgres image")
     parser.add_argument("--bootstrap-cache", type=Path)
     smoke(parser.parse_args())

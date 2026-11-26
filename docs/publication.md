@@ -153,8 +153,7 @@ Build the Phase 0–2 images from the current revision as described in the
 [storage](storage.md#reproduce-the-qualification) and
 [synchronization](synchronization.md#qualification) guides. Build the
 additional fixture images with the same local tag, then run the Phase 3
-Compose and Minikube probes. Alias the pinned Compose PostgreSQL image
-locally as `gh-docs-phase3-postgres:$tag` before Minikube loads it.
+Compose and Minikube probes. Use the same local PostgreSQL image for both.
 
 ~~~sh
 for role in serve sync; do
@@ -167,7 +166,7 @@ python3 -B scripts/phase3/minikube.py \
   --serve-image "gh-docs-phase3-serve:$tag" \
   --sync-image "gh-docs-phase3-sync:$tag" \
   --upstream-image "gh-docs-phase2-upstream:$tag" \
-  --postgres-image "gh-docs-phase3-postgres:$tag" \
+  --postgres-image "gh-docs-mcp-postgres:$tag" \
   --bootstrap-cache "$bootstrap_cache"
 ~~~
 

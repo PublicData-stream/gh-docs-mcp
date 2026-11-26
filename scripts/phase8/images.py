@@ -22,7 +22,8 @@ from release_version import CANDIDATE_VERSION, ROOT, cargo_digests, parse_versio
 
 SOURCE = "https://github.com/PublicData-stream/gh-docs-mcp"
 DOCKER = ("docker", "--context", "default")
-ROLES = ("serve", "sync", "feed")
+APP_ROLES = ("serve", "sync", "feed")
+ROLES = (*APP_ROLES, "postgres")
 ARCHES = ("amd64", "arm64")
 BUILDKIT = "docker.io/moby/buildkit:v0.35.1@sha256:baf6138eb8c37644800c7c913fba051e840ebb9ba13eaf92d92ef9a1712d0b4c"
 REGISTRY = "docker.io/library/registry:3@sha256:82f6ff4a7f982960c8aa51617fea3aabc485df6e55cce80d22deb1de36f1bc3c"

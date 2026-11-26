@@ -120,6 +120,6 @@ python3 -B scripts/phase5/minikube.py \
   --serve-image "gh-docs-mcp-serve:$tag" \
   --sync-image "gh-docs-phase3-sync:$tag" \
   --upstream-image "gh-docs-phase2-upstream:$tag" \
-  --postgres-image "gh-docs-phase5-postgres:$tag" \
+  --postgres-image "gh-docs-mcp-postgres:$tag" \
   --bootstrap-cache "$bootstrap_cache"
 ~~~
