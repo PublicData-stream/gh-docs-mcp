@@ -46,6 +46,7 @@ pub async fn migrate(client: &mut Client) -> Result<()> {
             | [2, 3, 4, 5, 6]
             | [2, 3, 4, 5, 6, 7]
             | [2, 3, 4, 5, 6, 7, 8]
+            | [2, 3, 4, 5, 6, 7, 8, 9]
     ) {
         return Err("unsupported Git catalog migration version".into());
     }
@@ -77,6 +78,11 @@ pub async fn migrate(client: &mut Client) -> Result<()> {
     if !versions.contains(&8) {
         transaction
             .batch_execute(include_str!("../../../migrations/0008_glob_approval.sql"))
+            .await?;
+    }
+    if !versions.contains(&9) {
+        transaction
+            .batch_execute(include_str!("../../../migrations/0009_markdown.sql"))
             .await?;
     }
     transaction.commit().await?;

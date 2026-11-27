@@ -6,6 +6,1007 @@
       "openWorldHint": false,
       "readOnlyHint": true
     },
+    "description": "List approved published Markdown source selectors.",
+    "inputSchema": {
+      "$defs": {
+        "Page": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "$ref": "#/$defs/Page"
+        }
+      },
+      "title": "MarkdownSources",
+      "type": "object"
+    },
+    "name": "markdown.sources",
+    "outputSchema": {
+      "$defs": {
+        "Context": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "title": "Context",
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "code"
+            ]
+          },
+          "properties": {
+            "coverage": {
+              "type": "object"
+            },
+            "entries": {
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "next_cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "entries",
+            "coverage",
+            "next_cursor"
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "guidance": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "guidance"
+          ]
+        }
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Find approved Markdown documents by source and output path globs.",
+    "inputSchema": {
+      "$defs": {
+        "ByteString": {
+          "description": "Encode a name whose byte grammar is validated by its caller.",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "utf8",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "base64",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "Context": {
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "type": "object"
+        },
+        "MarkdownSource": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "$ref": "#/$defs/Context"
+                },
+                "kind": {
+                  "const": "git_markdown",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "context"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "$ref": "#/$defs/Context"
+                },
+                "kind": {
+                  "const": "git_rustdoc",
+                  "type": "string"
+                },
+                "snapshot_digest": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "source_id",
+                "snapshot_digest",
+                "context"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "docsrs_rustdoc",
+                  "type": "string"
+                },
+                "snapshot_digest": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "source_id",
+                "snapshot_digest"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "Page": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "path_glob": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ByteString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_path_glob": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ByteString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/MarkdownSource"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "sources"
+      ],
+      "title": "MarkdownFind",
+      "type": "object"
+    },
+    "name": "markdown.find",
+    "outputSchema": {
+      "$defs": {
+        "Context": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "title": "Context",
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "code"
+            ]
+          },
+          "properties": {
+            "coverage": {
+              "type": "object"
+            },
+            "entries": {
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "next_cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "entries",
+            "coverage",
+            "next_cursor"
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "guidance": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "guidance"
+          ]
+        }
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Read a byte range from an exact Markdown document locator.",
+    "inputSchema": {
+      "$defs": {
+        "BytePath": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "utf8",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "base64",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "ByteRange": {
+          "additionalProperties": false,
+          "properties": {
+            "end": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "start": {
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "start",
+            "end"
+          ],
+          "type": "object"
+        },
+        "Context": {
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "type": "object"
+        },
+        "Encoding": {
+          "enum": [
+            "utf8",
+            "base64"
+          ],
+          "type": "string"
+        },
+        "MarkdownDocument": {
+          "additionalProperties": false,
+          "properties": {
+            "path": {
+              "$ref": "#/$defs/BytePath"
+            },
+            "source": {
+              "$ref": "#/$defs/MarkdownSource"
+            }
+          },
+          "required": [
+            "source",
+            "path"
+          ],
+          "type": "object"
+        },
+        "MarkdownSource": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "$ref": "#/$defs/Context"
+                },
+                "kind": {
+                  "const": "git_markdown",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "context"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "$ref": "#/$defs/Context"
+                },
+                "kind": {
+                  "const": "git_rustdoc",
+                  "type": "string"
+                },
+                "snapshot_digest": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "source_id",
+                "snapshot_digest",
+                "context"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "docsrs_rustdoc",
+                  "type": "string"
+                },
+                "snapshot_digest": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "source_id",
+                "snapshot_digest"
+              ],
+              "type": "object"
+            }
+          ]
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "document": {
+          "$ref": "#/$defs/MarkdownDocument"
+        },
+        "encoding": {
+          "$ref": "#/$defs/Encoding",
+          "default": "utf8"
+        },
+        "range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ByteRange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "document"
+      ],
+      "title": "MarkdownRead",
+      "type": "object"
+    },
+    "name": "markdown.read",
+    "outputSchema": {
+      "$defs": {
+        "Context": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "title": "Context",
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "code"
+            ]
+          },
+          "properties": {
+            "coverage": {
+              "type": "object"
+            },
+            "data": {
+              "type": "string"
+            },
+            "document": {
+              "type": "object"
+            }
+          },
+          "required": [
+            "document",
+            "data",
+            "coverage"
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "guidance": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "guidance"
+          ]
+        }
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
+    "description": "Search approved Markdown selected by both path globs.",
+    "inputSchema": {
+      "$defs": {
+        "ByteString": {
+          "description": "Encode a name whose byte grammar is validated by its caller.",
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "utf8",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "encoding": {
+                  "const": "base64",
+                  "type": "string"
+                },
+                "value": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "encoding",
+                "value"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "Context": {
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "type": "object"
+        },
+        "MarkdownSource": {
+          "oneOf": [
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "$ref": "#/$defs/Context"
+                },
+                "kind": {
+                  "const": "git_markdown",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "context"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "context": {
+                  "$ref": "#/$defs/Context"
+                },
+                "kind": {
+                  "const": "git_rustdoc",
+                  "type": "string"
+                },
+                "snapshot_digest": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "source_id",
+                "snapshot_digest",
+                "context"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "kind": {
+                  "const": "docsrs_rustdoc",
+                  "type": "string"
+                },
+                "snapshot_digest": {
+                  "type": "string"
+                },
+                "source_id": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "kind",
+                "source_id",
+                "snapshot_digest"
+              ],
+              "type": "object"
+            }
+          ]
+        },
+        "Page": {
+          "additionalProperties": false,
+          "properties": {
+            "cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "limit": {
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "type": "object"
+        }
+      },
+      "$schema": "https://json-schema.org/draft/2020-12/schema",
+      "additionalProperties": false,
+      "properties": {
+        "context_lines": {
+          "default": 0,
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "ignore_case": {
+          "default": false,
+          "type": "boolean"
+        },
+        "literal": {
+          "default": false,
+          "type": "boolean"
+        },
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "path_glob": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ByteString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "source_path_glob": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ByteString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sources": {
+          "items": {
+            "$ref": "#/$defs/MarkdownSource"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "sources",
+        "pattern"
+      ],
+      "title": "MarkdownSearch",
+      "type": "object"
+    },
+    "name": "markdown.search",
+    "outputSchema": {
+      "$defs": {
+        "Context": {
+          "$schema": "https://json-schema.org/draft/2020-12/schema",
+          "additionalProperties": false,
+          "properties": {
+            "commit_oid": {
+              "type": "string"
+            },
+            "generation_id": {
+              "type": "string"
+            },
+            "object_format": {
+              "type": "string"
+            },
+            "repository_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "repository_id",
+            "generation_id",
+            "object_format",
+            "commit_oid"
+          ],
+          "title": "Context",
+          "type": "object"
+        }
+      },
+      "oneOf": [
+        {
+          "not": {
+            "required": [
+              "code"
+            ]
+          },
+          "properties": {
+            "coverage": {
+              "type": "object"
+            },
+            "matches": {
+              "items": {
+                "type": "object"
+              },
+              "type": "array"
+            },
+            "next_cursor": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "matches",
+            "coverage",
+            "next_cursor"
+          ]
+        },
+        {
+          "additionalProperties": false,
+          "properties": {
+            "code": {
+              "type": "string"
+            },
+            "guidance": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "code",
+            "guidance"
+          ]
+        }
+      ],
+      "type": "object"
+    }
+  },
+  {
+    "annotations": {
+      "destructiveHint": false,
+      "idempotentHint": true,
+      "openWorldHint": false,
+      "readOnlyHint": true
+    },
     "description": "List reviewed active repository metadata in UUID order. Pages reflect the live catalog.",
     "inputSchema": {
       "$defs": {

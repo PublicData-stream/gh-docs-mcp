@@ -9,7 +9,7 @@ The qualification proxy binds to loopback.
 The seven [exploration tools](exploration.md) retain their argument shapes.
 Reuse the exact four-field context from `git.resolve`. The
 [runtime schema snapshot](../apps/schemas/tools.json) also includes the five
-tools below. `docs-mcp-serve --tool-schemas` exports the registry without
+Git tools below and the four [Markdown tools](markdown.md). `docs-mcp-serve --tool-schemas` exports the registry without
 connecting to PostgreSQL.
 
 Successful calls and tool errors carry structured JSON and equivalent JSON

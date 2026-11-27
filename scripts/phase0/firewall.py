@@ -6,7 +6,7 @@ from subprocess import run
 
 
 def install(name, env, fixture_root, *, sync_fixture=False, sync_https=(), sync_resolver=None,
-            control=False, feed_fixture=False, feed_https=(), feed_resolver=None):
+            control=False, feed_fixture=False, feed_https=(), feed_resolver=None, rustdoc_runner=False):
     # Bridge forwarding covers packets switched within a project bridge even
     # on hosts with br_netfilter disabled. Inet covers routed and host traffic.
     edges = [
@@ -57,8 +57,10 @@ def install(name, env, fixture_root, *, sync_fixture=False, sync_https=(), sync_
     host_output = [
         *common, f"{outgoing_scope} {neighbor_discovery} accept",
         f"{outgoing_scope} ip daddr {env['PROXY_IP']} tcp dport 8443 counter accept",
-        f"{outgoing_scope} counter drop",
     ]
+    if rustdoc_runner:
+        host_output.append(f'oifname "{env["CONTROL_BRIDGE"]}" ip daddr {env["SYNC_CONTROL_IP"]} tcp dport 8785 counter accept')
+    host_output.append(f"{outgoing_scope} counter drop")
 
     def chain(name, hook, rules):
         return f"chain {name} {{ type filter hook {hook} priority -5; policy accept;\n" + "\n".join(rules) + "\n}"

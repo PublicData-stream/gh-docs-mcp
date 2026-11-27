@@ -237,6 +237,17 @@ def wire_commands(fmt, context, phrase, *, glob=False):
     if glob:
         excluded = {"encoding": "utf8", "value": "docs/shared.txt"}
         probes.append(("git.read", {"context": context, "path": excluded}, '"code":"object_unavailable"', True))
+        source = {"kind": "git_markdown", "context": context}
+        probes.extend([
+            ("markdown.sources", {}, "git_markdown", False),
+            ("markdown.find", {"sources": [source], "source_path_glob": path, "path_glob": path},
+             "docs/setup/install.md", False),
+            ("markdown.read", {"document": {"source": source, "path": path}}, needle, False),
+            ("markdown.search", {"sources": [source], "path_glob": path, "pattern": needle, "literal": True},
+             '"returned_count":1', False),
+            ("markdown.read", {"document": {"source": source, "path": excluded}},
+             '"code":"object_unavailable"', True),
+        ])
     for name, args, expected, error in probes:
         request = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                               "params": {"name": name, "arguments": args, "_meta": metadata}})

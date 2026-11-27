@@ -16,7 +16,7 @@ pub(super) fn page(
     range: Option<ByteRange>,
     encoding: Encoding,
     pagination: &Pagination,
-    scope: Scope,
+    scope: Option<Scope>,
 ) -> Result<Value, Error> {
     let size = raw.len();
     let ByteRange { start, end } = range.unwrap_or(ByteRange {
@@ -25,8 +25,8 @@ pub(super) fn page(
     });
     let range =
         docs_mcp_core::git::checked_range(start, end, size).map_err(|_| Error::InvalidArgument)?;
-    let first =
-        usize::try_from(pagination.offset()?.unwrap_or(start)).map_err(|_| Error::CursorInvalid)?;
+    let first = usize::try_from(pagination.blob_offset(scope.is_some())?.unwrap_or(start))
+        .map_err(|_| Error::CursorInvalid)?;
     if first < range.start || first > range.end {
         return Err(Error::CursorInvalid);
     }
@@ -73,7 +73,7 @@ pub(super) fn page(
     let next = if complete {
         None
     } else {
-        Some(pagination.encode(Some(scope), Position::Offset(last as u64))?)
+        Some(pagination.encode(scope, Position::Offset(last as u64))?)
     };
     base["encoding"] = json!(encoding);
     base["data"] = json!(data);

@@ -81,7 +81,7 @@ USER 10001:10001
 ENTRYPOINT ["/usr/local/bin/docs-mcp-serve"]
 
 FROM runtime AS sync
-COPY --from=app-build /out/docs-mcp-sync /out/docs-mcp-git-sync /usr/local/bin/
+COPY --from=app-build /out/docs-mcp-sync /out/docs-mcp-git-sync /out/docs-mcp-git-reader /usr/local/bin/
 COPY --from=app-build /out/docs-mcp-git-sync /usr/local/libexec/docs-mcp-git/git-remote-docsmcp
 COPY --from=git-build /out/git /usr/local/bin/
 COPY --from=git-build /out/COPYING /usr/share/licenses/git/

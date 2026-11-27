@@ -151,7 +151,7 @@ def rehearse(tag, source):
 
         new = phase5.Wire(stack)
         new.validate_registry()
-        assert json.loads(phase2.sql(stack, backup.CATALOG)) == {**catalog, "schema": 8}
+        assert json.loads(phase2.sql(stack, backup.CATALOG)) == {**catalog, "schema": 9}
         assert backup.inventory(stack.root / "store") == canonical
         for repository, (raw, expected) in records.items():
             assert read(new, repository, raw) == expected
@@ -175,7 +175,7 @@ def rehearse(tag, source):
         for repository, (raw, expected) in records.items():
             assert read(old, repository, raw) == expected
         assert next_refs(old, cursor_args, new_cursor) == expected_refs
-        print("Populated docs-mcp cutover to schema 8 and schema 7 backup rollback passed", flush=True)
+        print("Populated docs-mcp cutover to schema 9 and schema 7 backup rollback passed", flush=True)
 
 
 if __name__ == "__main__":

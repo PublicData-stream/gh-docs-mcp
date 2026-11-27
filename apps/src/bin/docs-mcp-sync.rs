@@ -1,7 +1,7 @@
 use docs_mcp::{control, health, health_listener, scheduler};
 use docs_mcp_core::Result;
 use docs_mcp_storage::connect;
-use docs_mcp_sync::{publication, supervisor};
+use docs_mcp_sync::{markdown::jobs as markdown, publication, supervisor};
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -77,8 +77,50 @@ async fn main() -> Result<()> {
         );
         return Ok(());
     }
-    if args.is_empty() && control::enabled()? {
-        return scheduler::run().await;
+    if args.is_empty() {
+        if control::enabled()? {
+            return scheduler::run().await;
+        }
+        if docs_mcp::rustdoc::enabled()? {
+            return Err("Rustdoc acquisition requires the Sync scheduler".into());
+        }
+    }
+    if let [command, selector, value] = args.as_slice()
+        && matches!(
+            (command.as_str(), selector.as_str()),
+            ("--register-markdown-source", "--approval-file")
+                | (
+                    "--revoke-markdown-source" | "--markdown-status" | "--markdown-retry",
+                    "--source"
+                )
+        )
+    {
+        let operator = matches!(
+            command.as_str(),
+            "--register-markdown-source" | "--revoke-markdown-source"
+        );
+        let (client, driver) = connect(if operator {
+            "gh_docs_migrate"
+        } else {
+            "gh_docs_sync"
+        })
+        .await?;
+        let result = match command.as_str() {
+            "--register-markdown-source" => {
+                markdown::register(&client, std::path::Path::new(value)).await
+            }
+            "--revoke-markdown-source" => markdown::revoke(&client, value.parse()?).await,
+            _ => {
+                let status =
+                    markdown::status(&client, value.parse()?, command == "--markdown-retry")
+                        .await?;
+                println!("{status}");
+                Ok(())
+            }
+        };
+        drop(client);
+        driver.await?;
+        return result;
     }
     if matches!(args.as_slice(), [flag] if flag == "--migrate") {
         let (mut client, driver) = connect("gh_docs_migrate").await?;

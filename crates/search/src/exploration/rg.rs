@@ -1,7 +1,7 @@
 use std::io;
 
 use docs_mcp_core::git::{BytePath, ByteString, ObjectType};
-use docs_mcp_git::reader::{Reader, TreeMode};
+use docs_mcp_git::reader::{Process, Reader, TreeMode};
 use docs_mcp_storage::publication::Generation;
 use serde_json::{Value, json};
 use tokio::sync::OwnedSemaphorePermit;
@@ -104,17 +104,12 @@ fn search(
     let mut binary = 0;
     let mut oversized = 0;
     let mut next = None;
-    let mut worker = reader.search_worker()?;
-    worker.send(&[u8::from(request.literal) | (u8::from(request.ignore_case) << 1)])?;
-    worker.send(&(request.pattern.len() as u32).to_be_bytes())?;
-    worker.send(request.pattern.as_bytes())?;
-    let mut status = [0];
-    worker.read_exact(&mut status).map_err(worker_error)?;
-    match status {
-        [b'+'] => (),
-        [b'-'] => return Err(Error::InvalidRegex),
-        _ => return Err(Error::Internal),
-    }
+    let mut worker = SearchWorker::new(
+        reader.search_worker()?,
+        &request.pattern,
+        request.literal,
+        request.ignore_case,
+    )?;
     let exhausted = reader.with_batch(|batch| {
         verify_commit(snapshot, batch, commit)?;
         let tree_oid = batch.commit(commit)?.tree;
@@ -166,38 +161,8 @@ fn search(
                     binary += 1;
                     return Ok(true);
                 }
-                worker.send(&[1]).map_err(worker_error)?;
-                worker.send(&byte.to_be_bytes()).map_err(worker_error)?;
-                worker
-                    .send(&(raw.len() as u32).to_be_bytes())
-                    .map_err(worker_error)?;
-                worker.send(&raw).map_err(worker_error)?;
-                let mut count = [0; 4];
-                worker.read_exact(&mut count).map_err(worker_error)?;
-                let count = u32::from_be_bytes(count) as usize;
-                if count > MATCH_LIMIT {
-                    return Err(Error::Internal);
-                }
-                let mut previous = None;
-                for _ in 0..count {
-                    let mut fields = [0; RECORD_FIELDS];
-                    for field in &mut fields {
-                        let mut value = [0; 4];
-                        worker.read_exact(&mut value).map_err(worker_error)?;
-                        *field = u32::from_be_bytes(value) as usize;
-                    }
-                    let [line, start, end, hit_start, hit_end] = fields;
-                    if line == 0
-                        || start > hit_start
-                        || hit_start > hit_end
-                        || hit_end > end
-                        || end > raw.len()
-                        || hit_start < byte as usize
-                        || previous.is_some_and(|last| last >= hit_start)
-                    {
-                        return Err(Error::Internal);
-                    }
-                    previous = Some(hit_start);
+                for fields in worker.matches(&raw, byte)? {
+                    let hit_start = fields[3];
                     // Drain the bounded frame before asking the worker to exit.
                     if next.is_some() {
                         continue;
@@ -230,7 +195,7 @@ fn search(
             Err(error) => Err(error),
         }
     })?;
-    worker.finish().map_err(worker_error)?;
+    worker.finish()?;
     if candidates <= resume_path && pagination.position.is_some() && !exhausted {
         return Err(Error::CursorInvalid);
     }
@@ -258,6 +223,72 @@ fn search(
     Ok(base)
 }
 
+pub(super) struct SearchWorker(Process);
+
+impl SearchWorker {
+    pub fn new(
+        mut process: Process,
+        pattern: &str,
+        literal: bool,
+        ignore_case: bool,
+    ) -> Result<Self, Error> {
+        process.send(&[u8::from(literal) | (u8::from(ignore_case) << 1)])?;
+        process.send(&(pattern.len() as u32).to_be_bytes())?;
+        process.send(pattern.as_bytes())?;
+        let mut status = [0];
+        process.read_exact(&mut status).map_err(worker_error)?;
+        match status {
+            [b'+'] => Ok(Self(process)),
+            [b'-'] => Err(Error::InvalidRegex),
+            _ => Err(Error::Internal),
+        }
+    }
+
+    pub fn matches(&mut self, raw: &[u8], byte: u32) -> Result<Vec<[usize; RECORD_FIELDS]>, Error> {
+        let process = &mut self.0;
+        process.send(&[1]).map_err(worker_error)?;
+        process.send(&byte.to_be_bytes()).map_err(worker_error)?;
+        process
+            .send(&(raw.len() as u32).to_be_bytes())
+            .map_err(worker_error)?;
+        process.send(raw).map_err(worker_error)?;
+        let mut count = [0; 4];
+        process.read_exact(&mut count).map_err(worker_error)?;
+        let count = u32::from_be_bytes(count) as usize;
+        if count > MATCH_LIMIT {
+            return Err(Error::Internal);
+        }
+        let mut records = Vec::with_capacity(count);
+        let mut previous = None;
+        for _ in 0..count {
+            let mut fields = [0; RECORD_FIELDS];
+            for field in &mut fields {
+                let mut value = [0; 4];
+                process.read_exact(&mut value).map_err(worker_error)?;
+                *field = u32::from_be_bytes(value) as usize;
+            }
+            let [line, start, end, hit_start, hit_end] = fields;
+            if line == 0
+                || start > hit_start
+                || hit_start > hit_end
+                || hit_end > end
+                || end > raw.len()
+                || hit_start < byte as usize
+                || previous.is_some_and(|last| last >= hit_start)
+            {
+                return Err(Error::Internal);
+            }
+            previous = Some(hit_start);
+            records.push(fields);
+        }
+        Ok(records)
+    }
+
+    pub fn finish(self) -> Result<(), Error> {
+        self.0.finish().map_err(worker_error)
+    }
+}
+
 fn worker_error(error: io::Error) -> Error {
     match error.kind() {
         io::ErrorKind::UnexpectedEof | io::ErrorKind::BrokenPipe => Error::Budget,
@@ -265,7 +296,7 @@ fn worker_error(error: io::Error) -> Error {
     }
 }
 
-fn match_item(
+pub(super) fn match_item(
     raw: &[u8],
     path: &[u8],
     oid: &str,

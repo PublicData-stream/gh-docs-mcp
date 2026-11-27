@@ -23,4 +23,5 @@ pub fn health_bind() -> Result<SocketAddr> {
 pub mod exploration;
 pub mod git;
 pub mod git_manifest;
+pub mod markdown;
 pub mod path_glob;

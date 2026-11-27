@@ -1,6 +1,8 @@
 """Synthetic Git Smart HTTP endpoint for the isolated Phase 2 probes."""
 
+import hashlib
 import http.server
+import json
 import os
 from pathlib import Path
 import ssl
@@ -31,6 +33,11 @@ class Endpoint(http.server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.end_headers()
             return
+        routes = ROOT / "rustdoc-routes.json"
+        if self.command == "GET" and routes.is_file():
+            file = json.loads(routes.read_text()).get(path.path)
+            if file:
+                return self.rustdoc(ROOT / file)
         if path.path not in GIT_PATHS:
             self.send_error(404)
             return
@@ -86,6 +93,23 @@ class Endpoint(http.server.BaseHTTPRequestHandler):
                 self.wfile.write(payload)
         except (BrokenPipeError, ConnectionResetError, ssl.SSLError):
             pass
+
+    def rustdoc(self, file):
+        if not file.exists():
+            self.send_error(404)
+            return
+        payload = file.read_bytes()
+        etag = '"' + hashlib.sha256(payload).hexdigest() + '"'
+        if self.headers.get("If-None-Match") == etag:
+            self.send_response(304)
+            self.send_header("ETag", etag)
+            self.end_headers()
+            return
+        self.send_response(200)
+        self.send_header("ETag", etag)
+        self.send_header("Content-Length", str(len(payload)))
+        self.end_headers()
+        self.wfile.write(payload)
 
     def log_message(self, *_):
         pass

@@ -5,7 +5,9 @@ documentation and other source material stored in Git. The native Git store
 and confined reader support SHA-1 and SHA-256. Sync verifies private
 candidates and supports atomic publication, rollback, and guarded
 maintenance. MCP tools discover approved repositories, read pinned snapshots,
-search source bytes, and inspect approved history.
+search source bytes, and inspect approved history. Markdown tools also serve
+Rustdoc prose from approved Git builds and exact docs.rs releases.
+[Markdown sources](docs/markdown.md)
 
 Operators can onboard repositories from any host that satisfies the service's
 HTTPS Git requirements. [Source onboarding](docs/synchronization.md#source-approval)

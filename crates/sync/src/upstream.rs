@@ -298,7 +298,14 @@ pub(crate) async fn client(
     approval: &Approval,
     fixture: Option<&Fixture>,
 ) -> std::result::Result<(Client, String), TransferError> {
-    let host = approval.host();
+    fixed_client(approval.host(), &approval.url, fixture).await
+}
+
+pub(crate) async fn fixed_client(
+    host: &str,
+    url: &str,
+    fixture: Option<&Fixture>,
+) -> std::result::Result<(Client, String), TransferError> {
     let (base, addresses, fixture_certificate) = if let Some(_fixture) = fixture {
         #[cfg(feature = "fixtures")]
         {
@@ -308,7 +315,7 @@ pub(crate) async fn client(
             } else {
                 "http"
             };
-            let path = approval.url[8 + host.len()..].to_owned();
+            let path = &url[8 + host.len()..];
             (
                 format!("{scheme}://{host}:{}{path}", _fixture.address.port()),
                 vec![_fixture.address],
@@ -343,7 +350,7 @@ pub(crate) async fn client(
         {
             return Err(TransferError::permanent("destination_denied"));
         }
-        (approval.url.clone(), addresses, None)
+        (url.to_owned(), addresses, None)
     };
     let _ = rustls::crypto::ring::default_provider().install_default();
     let mut builder = Client::builder()

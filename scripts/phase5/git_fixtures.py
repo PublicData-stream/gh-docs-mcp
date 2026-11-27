@@ -71,8 +71,8 @@ def glob_revisions(repo, revision, gitlink):
     return {"base": base, "hidden": hidden, "head": head, "future": future, "budget": budget}
 
 
-def prepare(root):
-    prepare_upstream(root)
+def prepare(root, *, extra_tls_names=()):
+    prepare_upstream(root, extra_tls_names=extra_tls_names)
     for fmt in REPOS:
         repo = repo_path(root, fmt)
         proof_path = root / f"{fmt}-oracle.json"

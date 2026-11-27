@@ -42,7 +42,7 @@ def commit(repo, identity, *, parent=None, size=48):
     return value, blob.decode(), body
 
 
-def prepare(root, *, host=HOST, namespace=""):
+def prepare(root, *, host=HOST, namespace="", extra_tls_names=()):
     root.mkdir(parents=True, exist_ok=True)
     certs = root / "tls"
     certs.mkdir()
@@ -51,7 +51,8 @@ def prepare(root, *, host=HOST, namespace=""):
     run("openssl", "req", "-new", "-nodes", "-newkey", "rsa:2048", "-subj", f"/CN={host}",
         "-keyout", certs / "upstream.key", "-out", root / "upstream.csr")
     ext = root / "extensions"
-    ext.write_text(f"subjectAltName=DNS:{host}\nextendedKeyUsage=serverAuth\n")
+    names = ",".join(f"DNS:{name}" for name in (host, *extra_tls_names))
+    ext.write_text(f"subjectAltName={names}\nextendedKeyUsage=serverAuth\n")
     run("openssl", "x509", "-req", "-in", root / "upstream.csr", "-CA", certs / "ca.crt",
         "-CAkey", root / "ca.key", "-CAcreateserial", "-out", certs / "upstream.crt", "-days", "2", "-extfile", ext)
     for item in (root / "ca.key", root / "upstream.csr", ext, certs / "ca.srl"):

@@ -349,7 +349,7 @@ def rehearse(args, refs, work, version):
         target.compose("run", "--rm", "--no-deps", "-T", "sync", "--recover", "--repository", repo, timeout=75)
         target.one_shot("migrate")
         target.one_shot("migrate")
-        assert phase2.sql(target, "SELECT max(version) FROM git_catalog.migrations") == "8"
+        assert phase2.sql(target, "SELECT max(version) FROM git_catalog.migrations") == "9"
         open_stack(target)
         wire = phase5.Wire(target)
         wire.validate_registry(host_rejection=(403, 404, 421))
@@ -434,13 +434,13 @@ def glob_restore(args, refs, work):
         project = backup.Project(source_name, [BASE, source.root / "phase2.json"], source.context)
         captured = backup.backup(project, source.root / "store", bundle)
     digest = captured["manifest_sha256"]
-    assert backup.verify(bundle, digest)["catalog"]["schema"] == 8
+    assert backup.verify(bundle, digest)["catalog"]["schema"] == 9
     with release_stack(args.fixture_tag, refs) as (target, project, _):
         restored = backup.restore(project, project.store(), bundle, digest)
         target.one_shot("migrate")
         open_stack(target)
         assert readback(target, proof["head"]) == expected
-    print("Schema 8 backup restored glob approval and path denials", flush=True)
+    print("Schema 9 backup restored glob approval and path denials", flush=True)
     return {"backup": captured, "restore": restored}
 
 

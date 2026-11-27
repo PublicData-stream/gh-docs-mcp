@@ -30,7 +30,7 @@ APPROVAL = "/phase2-approval.json"
 
 @contextmanager
 def stack(tag, *, publication=False, fixture_setup=prepare, serve_target=None, control=False, host=HOST,
-          configure_stack=None):
+          configure_stack=None, rustdoc_runner=False):
     phase = 6 if control else 5 if serve_target == "serve" else 4 if serve_target == "phase4-serve" else 3 if publication else 2
     project = f"docsmcp{phase}-{secrets.token_hex(5)}"
     root = Path(tempfile.mkdtemp(prefix=f"{project}-", dir="/tmp"))
@@ -75,7 +75,8 @@ def stack(tag, *, publication=False, fixture_setup=prepare, serve_target=None, c
             configure_stack(instance, override)
         instance.create()
         instance.compose("create", "--no-build", "--pull", "never", "upstream")
-        firewall.install(table, instance.env, root, sync_fixture=True, control=control, feed_fixture=control)
+        firewall.install(table, instance.env, root, sync_fixture=True, control=control, feed_fixture=control,
+                         rustdoc_runner=rustdoc_runner)
         installed = True
         instance.start()
         instance.compose("start", "upstream")
@@ -92,7 +93,8 @@ def stack(tag, *, publication=False, fixture_setup=prepare, serve_target=None, c
         yield instance, upstream, approval_path, endpoint
     except BaseException:
         roles = ("sync", "serve", "feed", "postgres", "upstream") if control else ("upstream",)
-        print(instance.compose("logs", "--no-color", "--tail", "12", *roles, expected=None).stdout, flush=True)
+        tail = "120" if rustdoc_runner else "12"
+        print(instance.compose("logs", "--no-color", "--tail", tail, *roles, expected=None).stdout, flush=True)
         raise
     finally:
         try:
@@ -133,8 +135,19 @@ def configure_control(stack, services, tag, upstream, address):
                                        "target": CA, "read_only": True}]
 
 
+def restore_v8(stack):
+    """Remove the empty Markdown catalog to rehearse the additive migration."""
+    assert sql(stack, "SELECT count(*) FROM git_catalog.markdown_approvals") == "0"
+    sql(stack, """BEGIN;
+        DROP VIEW git_catalog.readable_markdown_documents, git_catalog.readable_markdown_snapshots;
+        DROP TABLE git_catalog.markdown_documents, git_catalog.markdown_snapshots,
+                   git_catalog.markdown_jobs, git_catalog.markdown_approvals;
+        DELETE FROM git_catalog.migrations WHERE version = 9; COMMIT;""")
+
+
 def restore_v7(stack):
     """Rewind glob approval DDL in a disposable catalog with only legacy policies."""
+    restore_v8(stack)
     assert sql(stack, "SELECT count(*) FROM git_catalog.source_approvals "
                       "WHERE approval->'exploration'->'version' = '3'::jsonb") == "0"
     previous = (ROOT / "migrations/0006_output_approval.sql").read_text().split("INSERT INTO")[0]

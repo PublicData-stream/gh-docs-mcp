@@ -1,0 +1,15 @@
+[Unit]
+Description=Run one docs-mcp Rustdoc build inside the disposable guest
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=exec
+ExecStart=/usr/bin/python3 -B /opt/docs-mcp-rustdoc/guest.py
+Environment=DOCKER_HOST=unix://%t/docker.sock
+UMask=0077
+NoNewPrivileges=yes
+RuntimeMaxSec=1150
+
+[Install]
+WantedBy=default.target

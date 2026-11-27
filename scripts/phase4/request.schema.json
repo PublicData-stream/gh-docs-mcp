@@ -6,6 +6,74 @@
       "type": "object",
       "properties": {
         "arguments": {
+          "$ref": "#/$defs/MarkdownSources"
+        },
+        "tool": {
+          "type": "string",
+          "const": "markdown.sources"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "arguments"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "$ref": "#/$defs/MarkdownFind"
+        },
+        "tool": {
+          "type": "string",
+          "const": "markdown.find"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "arguments"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "$ref": "#/$defs/MarkdownRead"
+        },
+        "tool": {
+          "type": "string",
+          "const": "markdown.read"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "arguments"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "arguments": {
+          "$ref": "#/$defs/MarkdownSearch"
+        },
+        "tool": {
+          "type": "string",
+          "const": "markdown.search"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "tool",
+        "arguments"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "arguments": {
           "$ref": "#/$defs/RepositorySearch"
         },
         "tool": {
@@ -499,6 +567,225 @@
       "required": [
         "context"
       ]
+    },
+    "MarkdownDocument": {
+      "type": "object",
+      "properties": {
+        "path": {
+          "$ref": "#/$defs/BytePath"
+        },
+        "source": {
+          "$ref": "#/$defs/MarkdownSource"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "source",
+        "path"
+      ]
+    },
+    "MarkdownFind": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "path_glob": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ByteString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "source_path_glob": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ByteString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MarkdownSource"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "sources"
+      ]
+    },
+    "MarkdownRead": {
+      "type": "object",
+      "properties": {
+        "cursor": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "document": {
+          "$ref": "#/$defs/MarkdownDocument"
+        },
+        "encoding": {
+          "$ref": "#/$defs/Encoding",
+          "default": "utf8"
+        },
+        "range": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ByteRange"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "document"
+      ]
+    },
+    "MarkdownSearch": {
+      "type": "object",
+      "properties": {
+        "context_lines": {
+          "type": "integer",
+          "format": "uint8",
+          "default": 0,
+          "maximum": 255,
+          "minimum": 0
+        },
+        "ignore_case": {
+          "type": "boolean",
+          "default": false
+        },
+        "literal": {
+          "type": "boolean",
+          "default": false
+        },
+        "page": {
+          "$ref": "#/$defs/Page"
+        },
+        "path_glob": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ByteString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "pattern": {
+          "type": "string"
+        },
+        "source_path_glob": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ByteString"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/MarkdownSource"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "sources",
+        "pattern"
+      ]
+    },
+    "MarkdownSource": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "context": {
+              "$ref": "#/$defs/Context"
+            },
+            "kind": {
+              "type": "string",
+              "const": "git_markdown"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "context"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "context": {
+              "$ref": "#/$defs/Context"
+            },
+            "kind": {
+              "type": "string",
+              "const": "git_rustdoc"
+            },
+            "snapshot_digest": {
+              "type": "string"
+            },
+            "source_id": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "source_id",
+            "snapshot_digest",
+            "context"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "docsrs_rustdoc"
+            },
+            "snapshot_digest": {
+              "type": "string"
+            },
+            "source_id": {
+              "type": "string"
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "kind",
+            "source_id",
+            "snapshot_digest"
+          ]
+        }
+      ]
+    },
+    "MarkdownSources": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "$ref": "#/$defs/Page"
+        }
+      },
+      "additionalProperties": false
     },
     "Page": {
       "type": "object",

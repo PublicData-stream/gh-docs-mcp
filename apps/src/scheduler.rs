@@ -90,6 +90,7 @@ pub async fn run() -> Result<()> {
         outcome = schedule(&db, &roster, concurrency, &mut workers, &mut active, signal) => outcome,
         outcome = inbox => outcome,
         outcome = deliver(db.clone(), sender) => outcome,
+        outcome = crate::rustdoc::run(db.clone()) => outcome,
         outcome = health => outcome.map_err(Into::into),
         outcome = control::shutdown() => outcome.map_err(Into::into),
         outcome = watch_owner(&db) => outcome,

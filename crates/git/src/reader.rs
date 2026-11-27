@@ -15,10 +15,12 @@ use std::{
 use docs_mcp_core::git::{ObjectFormat, ObjectType, Oid, RepositoryId, validate_component};
 
 use crate::{
-    process::{Process, ensure_time},
+    process::ensure_time,
     sandbox,
     store::{self, Fence, Location, LockMode, LockScope},
 };
+
+pub use crate::process::Process;
 
 const READER: &str = "/usr/local/bin/docs-mcp-git-reader";
 const BLOB_BYTES: usize = 8 * 1024 * 1024;
@@ -48,6 +50,29 @@ pub struct Reader {
     force_failure: AtomicBool,
     _fences: Vec<Fence>,
     cancellation: Option<Arc<AtomicBool>>,
+}
+
+/// Search approved bytes independently of the Git object store.
+pub fn spawn_search_worker(
+    deadline: Instant,
+    cancellation: Option<Arc<AtomicBool>>,
+    force_failure: bool,
+) -> io::Result<Process> {
+    let mut command = Command::new("/usr/local/bin/docs-mcp-search-worker");
+    command.env_clear();
+    if force_failure {
+        command.arg("--fail-setup");
+    }
+    let mut process = Process::spawn(command, deadline, cancellation)?;
+    let mut startup = [0];
+    process.read_exact(&mut startup)?;
+    if startup != [WORKER_READY] {
+        return Err(io::Error::new(
+            io::ErrorKind::PermissionDenied,
+            SandboxUnavailable,
+        ));
+    }
+    Ok(process)
 }
 
 impl Reader {
@@ -130,21 +155,11 @@ impl Reader {
     }
 
     pub fn search_worker(&self) -> io::Result<Process> {
-        let mut command = Command::new("/usr/local/bin/docs-mcp-search-worker");
-        command.env_clear();
-        if self.force_failure.load(Ordering::Relaxed) {
-            command.arg("--fail-setup");
-        }
-        let mut process = Process::spawn(command, self.deadline, self.cancellation.clone())?;
-        let mut startup = [0];
-        process.read_exact(&mut startup)?;
-        if startup != [WORKER_READY] {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                SandboxUnavailable,
-            ));
-        }
-        Ok(process)
+        spawn_search_worker(
+            self.deadline,
+            self.cancellation.clone(),
+            self.force_failure.load(Ordering::Relaxed),
+        )
     }
 
     fn spawn(&self, tree: Option<Oid>) -> io::Result<Process> {

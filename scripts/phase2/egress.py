@@ -40,6 +40,7 @@ def main():
     parser.add_argument("--resolver", type=ip_address)
     parser.add_argument("--https", action="append", type=ip_network, default=[])
     parser.add_argument("--control", action="store_true")
+    parser.add_argument("--rustdoc-runner", action="store_true")
     parser.add_argument("--feed-resolver", type=ip_address)
     parser.add_argument("--feed-https", action="append", type=ip_network, default=[])
     args = parser.parse_args()
@@ -54,6 +55,8 @@ def main():
         parser.error("enable sync DNS and HTTPS together")
     if bool(args.feed_https) != (args.feed_resolver is not None):
         parser.error("enable feed DNS and HTTPS together")
+    if args.rustdoc_runner and not args.control:
+        parser.error("Rustdoc runner access requires the control bridges")
     if args.feed_https and not args.control:
         parser.error("feed HTTPS requires the control links")
     for net in (*args.https, *args.feed_https):
@@ -61,7 +64,7 @@ def main():
             parser.error("an HTTPS rule must name a public destination range")
     firewall.install(args.table, environment(args.compose_env), args.output_dir,
                      sync_https=args.https, sync_resolver=args.resolver, control=args.control,
-                     feed_https=args.feed_https, feed_resolver=args.feed_resolver)
+                     feed_https=args.feed_https, feed_resolver=args.feed_resolver, rustdoc_runner=args.rustdoc_runner)
 
 
 if __name__ == "__main__":

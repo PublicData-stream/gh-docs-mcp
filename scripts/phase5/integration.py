@@ -91,8 +91,10 @@ class Wire:
         assert result["_meta"]["io.modelcontextprotocol/serverInfo"]["name"] == expected_name
         registry = result["tools"]
         self.tools = {tool["name"]: tool for tool in registry}
-        assert len(self.tools) == len(registry) == 12
+        assert len(self.tools) == len(registry) == (12 if legacy else 16)
         snapshot = json.loads((ROOT / "apps/schemas/tools.json").read_text())
+        if legacy:
+            snapshot = [tool for tool in snapshot if not tool["name"].startswith("markdown.")]
         assert registry == snapshot
         serve = "gh-docs-serve" if legacy else "docs-mcp-serve"
         assert json.loads(self.stack.exec("serve", serve, "--tool-schemas").stdout) == snapshot
@@ -140,7 +142,7 @@ def migration_and_legacy(wire, config, endpoint):
     assert phase2.sql(stack, "SELECT max(version) FROM git_catalog.migrations") == "5"
     stack.one_shot("migrate")
     stack.one_shot("migrate")
-    assert phase2.sql(stack, "SELECT max(version) FROM git_catalog.migrations") == "8"
+    assert phase2.sql(stack, "SELECT max(version) FROM git_catalog.migrations") == "9"
     assert wire.call("repository.info", {"repository_id": repo}) == before
     assert phase2.sql(stack, """SELECT has_table_privilege('gh_docs_serve',
         'git_catalog.exploration_generations', 'SELECT'),

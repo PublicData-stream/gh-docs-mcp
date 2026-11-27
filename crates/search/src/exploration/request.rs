@@ -7,6 +7,14 @@ use super::Error;
 #[derive(Debug, Deserialize, JsonSchema)]
 #[serde(tag = "tool", content = "arguments", deny_unknown_fields)]
 pub enum Request {
+    #[serde(rename = "markdown.sources")]
+    MarkdownSources(MarkdownSources),
+    #[serde(rename = "markdown.find")]
+    MarkdownFind(MarkdownFind),
+    #[serde(rename = "markdown.read")]
+    MarkdownRead(MarkdownRead),
+    #[serde(rename = "markdown.search")]
+    MarkdownSearch(MarkdownSearch),
     #[serde(rename = "repository.search")]
     RepositorySearch(RepositorySearch),
     #[serde(rename = "repository.info")]
@@ -246,4 +254,99 @@ pub struct Blame {
     pub line_range: Option<ByteRange>,
     #[serde(default)]
     pub page: Page,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
+pub enum MarkdownSource {
+    GitMarkdown {
+        context: Context,
+    },
+    GitRustdoc {
+        source_id: String,
+        snapshot_digest: String,
+        context: Context,
+    },
+    DocsrsRustdoc {
+        source_id: String,
+        snapshot_digest: String,
+    },
+}
+
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MarkdownDocument {
+    pub source: MarkdownSource,
+    pub path: BytePath,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MarkdownSources {
+    #[serde(default)]
+    pub page: Page,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MarkdownFind {
+    pub sources: Vec<MarkdownSource>,
+    pub path_glob: Option<ByteString>,
+    pub source_path_glob: Option<ByteString>,
+    #[serde(default)]
+    pub page: Page,
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MarkdownSearch {
+    pub sources: Vec<MarkdownSource>,
+    pub path_glob: Option<ByteString>,
+    pub source_path_glob: Option<ByteString>,
+    pub pattern: String,
+    #[serde(default)]
+    pub literal: bool,
+    #[serde(default)]
+    pub ignore_case: bool,
+    #[serde(default)]
+    pub context_lines: u8,
+    #[serde(default)]
+    pub page: Page,
+}
+
+#[derive(Debug, Serialize)]
+pub(super) struct MarkdownPattern {
+    pub pattern: String,
+    pub literal: bool,
+    pub ignore_case: bool,
+    pub context_lines: u8,
+}
+
+impl MarkdownSearch {
+    pub(super) fn into_parts(self) -> (MarkdownFind, MarkdownPattern) {
+        (
+            MarkdownFind {
+                sources: self.sources,
+                path_glob: self.path_glob,
+                source_path_glob: self.source_path_glob,
+                page: self.page,
+            },
+            MarkdownPattern {
+                pattern: self.pattern,
+                literal: self.literal,
+                ignore_case: self.ignore_case,
+                context_lines: self.context_lines,
+            },
+        )
+    }
+}
+
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MarkdownRead {
+    pub document: MarkdownDocument,
+    pub range: Option<ByteRange>,
+    #[serde(default)]
+    pub encoding: Encoding,
+    pub cursor: Option<String>,
 }

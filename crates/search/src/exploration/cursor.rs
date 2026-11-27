@@ -168,9 +168,15 @@ impl Pagination {
     }
 
     pub fn offset(&self) -> Result<Option<u64>, Error> {
+        self.blob_offset(true)
+    }
+
+    pub fn blob_offset(&self, scoped: bool) -> Result<Option<u64>, Error> {
         match (&self.position, &self.scope) {
             (None, None) => Ok(None),
-            (Some(Position::Offset(offset)), Some(_)) => Ok(Some(*offset)),
+            (Some(Position::Offset(offset)), scope) if scope.is_some() == scoped => {
+                Ok(Some(*offset))
+            }
             _ => Err(Error::CursorInvalid),
         }
     }

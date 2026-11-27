@@ -42,8 +42,33 @@ SELECT coalesce(jsonb_agg(jsonb_build_array(repository_id, scope, generation_id,
     generation_id), '[]') FROM git_catalog.lock_keys
 """
 SQL = ["psql", "-XqAt", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "gh_docs"]
-SUPPORTED_SCHEMAS = (7, 8)
+SUPPORTED_SCHEMAS = (7, 8, 9)
 
+
+MARKDOWN_CATALOG = """
+SELECT jsonb_build_object(
+    'unsettled', EXISTS (SELECT FROM git_catalog.markdown_jobs WHERE state = 'running'),
+    'snapshots', coalesce((SELECT jsonb_agg(to_jsonb(s) ORDER BY source_id, digest)
+        FROM (SELECT m.source_id, m.digest, m.artifact_digest, m.policy_version,
+                     m.repository_id, m.generation_id, m.byte_count,
+                     (SELECT encode(sha256(convert_to(coalesce(string_agg(
+                          jsonb_build_array(d.path, d.source_path, d.item, d.kind, d.line,
+                              encode(sha256(d.markdown), 'hex'))::text,
+                          chr(10) ORDER BY d.path), ''), 'UTF8')), 'hex')
+                      FROM git_catalog.markdown_documents d
+                      WHERE (d.source_id,d.digest) = (m.source_id,m.digest)) AS documents_sha256
+              FROM git_catalog.markdown_snapshots m) s), '[]')
+)
+"""
+
+
+def read_catalog(connection):
+    catalog = json.loads(query(connection, CATALOG))
+    if catalog["schema"] >= 9:
+        markdown = json.loads(query(connection, MARKDOWN_CATALOG))
+        catalog["unsettled"] = catalog["unsettled"] or markdown["unsettled"]
+        catalog["markdown_snapshots"] = markdown["snapshots"]
+    return catalog
 
 def sha256(path):
     with path.open("rb") as data:
@@ -230,7 +255,7 @@ def backup(project, store, bundle):
     start = time.monotonic()
     with ExitStack() as handles, project.session() as connection:
         freeze(connection, handles, store)
-        catalog = json.loads(query(connection, CATALOG))
+        catalog = read_catalog(connection)
         if catalog["schema"] not in SUPPORTED_SCHEMAS:
             raise ValueError("unsupported catalog schema for backup")
         if catalog["unsettled"]:
@@ -244,7 +269,7 @@ def backup(project, store, bundle):
             os.fsync(stream.fileno())
         entries = inventory(store)
         copy_store(store, bundle / "store", entries)
-        if json.loads(query(connection, CATALOG)) != catalog or inventory(store) != entries:
+        if read_catalog(connection) != catalog or inventory(store) != entries:
             raise ValueError("source changed while snapshot was fenced")
         manifest = bundle / "manifest.json"
         with manifest.open("x") as stream:
@@ -280,7 +305,7 @@ def restore(project, store, bundle, expected):
         with (bundle / "catalog.dump").open("rb") as stream:
             project.postgres("pg_restore", "--single-transaction", "--exit-on-error",
                              "-U", "postgres", "-d", "gh_docs", stdin=stream)
-        if json.loads(query(connection, CATALOG)) != record["catalog"]:
+        if read_catalog(connection) != record["catalog"]:
             raise ValueError("restored catalog differs from backup")
         project.assert_offline()
     for repository in record["catalog"]["repositories"]:

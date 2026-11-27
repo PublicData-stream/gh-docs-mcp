@@ -24,3 +24,10 @@ selected commit contains an approved descendant. [Glob grants](../exploration.md
 During Phase 0, the owner identified `github/docs` and `refs/heads/main` as a
 candidate for review. It remains unapproved. Its documentation and code have
 separate license terms. [GitHub Docs upstream license summary](https://github.com/github/docs#license)
+
+Rustdoc sources require explicit standing approval for acquisition and
+output. A matching source-path and Markdown-path pair grants the derived
+document. Git approvals cover the exported workspace and dependency-influenced
+prose. A dedicated build guest receives only those job inputs. Hosted
+approvals bind an exact release, target, and Rustdoc format.
+[Markdown source approval](../markdown.md#approve-and-schedule-sources)

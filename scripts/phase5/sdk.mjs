@@ -11,7 +11,7 @@ await client.connect(new StreamableHTTPClientTransport(new URL(url)));
 try {
   assert.deepEqual((await client.discover()).supportedVersions, [revision]);
   const { tools } = await client.listTools();
-  assert.equal(tools.length, 12);
+  assert.equal(tools.length, 16);
   const call = async (name, args) => {
     const result = await client.callTool({ name, arguments: args });
     assert.notEqual(result.isError, true, JSON.stringify(result));
@@ -35,7 +35,12 @@ try {
   await call('git.show', { context });
   await call('git.diff', { base: context, head: context });
   await call('git.blame', { context, path });
-  console.log('Pinned TypeScript SDK discovered, listed and called all twelve tools');
+  const sources = await call('markdown.sources', {});
+  assert.ok(sources.entries.some(entry => entry.kind === 'git_markdown' && entry.repository_id === repository));
+  const selectors = [{ kind: 'git_markdown', context }];
+  await call('markdown.find', { sources: selectors });
+  await call('markdown.search', { sources: selectors, pattern: '資料 match', literal: true });
+  console.log('Pinned TypeScript SDK discovered, listed and called the Git and Markdown tools');
 } finally {
   await client.close();
 }

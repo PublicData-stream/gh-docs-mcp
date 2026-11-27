@@ -3,6 +3,7 @@
 mod blob;
 mod cursor;
 mod history;
+mod markdown;
 mod matcher;
 mod page;
 mod request;
@@ -193,14 +194,14 @@ impl Explorer {
         slot.try_acquire_owned().map_err(|_| Error::Budget)
     }
 
-    async fn fenced(
+    async fn fenced<T: Send + 'static>(
         &self,
         client: &mut Client,
         repo: RepositoryId,
         generation: Option<i64>,
-        global: OwnedSemaphorePermit,
-        operation: impl FnOnce(Generation, &Reader) -> Result<Value, Error> + Send + 'static,
-    ) -> Result<Value, Error> {
+        global: impl Send + 'static,
+        operation: impl FnOnce(Generation, &Reader) -> Result<T, Error> + Send + 'static,
+    ) -> Result<T, Error> {
         // Screen visibility before repository-specific admission. The storage
         // layer checks again under the repository and generation fences.
         if catalog::get(client, repo, generation)
@@ -245,6 +246,18 @@ impl Explorer {
             .await
             .map_err(Error::from_storage)?;
         match request {
+            Request::MarkdownSources(request) => self.markdown_sources(&client, request).await,
+            Request::MarkdownFind(request) => {
+                self.markdown_scan(&mut client, request, None, global).await
+            }
+            Request::MarkdownSearch(request) => {
+                let (request, search) = request.into_parts();
+                self.markdown_scan(&mut client, request, Some(search), global)
+                    .await
+            }
+            Request::MarkdownRead(request) => {
+                self.markdown_read(&mut client, request, global).await
+            }
             Request::RepositorySearch(request) => self.repositories(&client, request).await,
             Request::RepositoryInfo(request) => {
                 let repo = repository(&request.repository_id)?;
@@ -664,7 +677,7 @@ fn read_blob(
             request.range,
             request.encoding,
             pagination,
-            scope,
+            Some(scope),
         )
     })
 }

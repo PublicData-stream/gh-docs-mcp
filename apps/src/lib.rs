@@ -2,6 +2,7 @@
 
 pub mod control;
 pub mod mcp;
+pub mod rustdoc;
 pub mod scheduler;
 
 use axum::{Router, http::StatusCode, routing::get};

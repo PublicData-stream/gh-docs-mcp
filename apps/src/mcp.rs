@@ -115,7 +115,7 @@ fn definition<T: JsonSchema>(name: &str, description: &str, required: &[&str]) -
     for field in required {
         let field_schema = match *field {
             "context" | "base" => json!({"$ref":"#/$defs/Context"}),
-            "source" | "coverage" | "commit" => json!({"type":"object"}),
+            "source" | "coverage" | "commit" | "document" => json!({"type":"object"}),
             "entries" | "matches" => json!({"type":"array","items":{"type":"object"}}),
             "next_cursor" | "parent" => json!({"type":["string","null"]}),
             "scan_complete" => json!({"type":"boolean"}),
@@ -154,6 +154,26 @@ fn definition<T: JsonSchema>(name: &str, description: &str, required: &[&str]) -
 
 static TOOLS: LazyLock<Vec<Tool>> = LazyLock::new(|| {
     vec![
+        definition::<exploration::MarkdownSources>(
+            "markdown.sources",
+            "List approved published Markdown source selectors.",
+            &["entries", "coverage", "next_cursor"],
+        ),
+        definition::<exploration::MarkdownFind>(
+            "markdown.find",
+            "Find approved Markdown documents by source and output path globs.",
+            &["entries", "coverage", "next_cursor"],
+        ),
+        definition::<exploration::MarkdownRead>(
+            "markdown.read",
+            "Read a byte range from an exact Markdown document locator.",
+            &["document", "data", "coverage"],
+        ),
+        definition::<exploration::MarkdownSearch>(
+            "markdown.search",
+            "Search approved Markdown selected by both path globs.",
+            &["matches", "coverage", "next_cursor"],
+        ),
         definition::<exploration::RepositorySearch>(
             "repository.search",
             "List reviewed active repository metadata in UUID order. Pages reflect the live catalog.",
@@ -541,7 +561,7 @@ mod tests {
     fn production_registry_matches_exported_schema() {
         let snapshot: Value = serde_json::from_str(include_str!("../schemas/tools.json")).unwrap();
         assert_eq!(tool_snapshot(), snapshot);
-        assert_eq!(TOOLS.len(), 12);
+        assert_eq!(TOOLS.len(), 16);
     }
 
     #[test]

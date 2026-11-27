@@ -1,0 +1,33 @@
+--- a/src/tools/mod.rs
++++ b/src/tools/mod.rs
+@@ -51,0 +52,7 @@
++        if std::env::var_os("DOCS_MCP_RUSTWIDE_OFFLINE").is_some() {
++            if !tool.is_installed(workspace)? {
++                bail!("preinstalled Rustwide tool {} is unavailable", tool.name());
++            }
++            continue;
++        }
++
+--- a/src/cmd/mod.rs
++++ b/src/cmd/mod.rs
+@@ -444 +444,5 @@
+-            if let Some(user) = native::current_user() {
++            if std::env::var_os("DOCS_MCP_RUSTWIDE_OFFLINE").is_some() {
++                // The dedicated rootless daemon maps namespace root to its
++                // unprivileged owner, which owns the bind-mounted target.
++                command = command.user(0, 0);
++            } else if let Some(user) = native::current_user() {
+--- a/src/cmd/sandbox/mod.rs
++++ b/src/cmd/sandbox/mod.rs
+@@ -603,0 +604,11 @@
++
++        if std::env::var_os("DOCS_MCP_RUSTWIDE_OFFLINE").is_some() {
++            args.extend([
++                "--cap-drop=ALL".into(),
++                "--security-opt=no-new-privileges".into(),
++                "--read-only".into(),
++                "--tmpfs".into(),
++                "/tmp:rw,nodev,nosuid,size=256m,mode=1777".into(),
++                "--pids-limit=256".into(),
++            ]);
++        }

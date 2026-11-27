@@ -2,6 +2,7 @@
 
 mod approval;
 mod candidate;
+pub mod markdown;
 pub mod observation;
 mod private;
 pub mod publication;

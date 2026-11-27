@@ -1116,3 +1116,47 @@ the injected post-publication exit check. A full replay observed the
 expected exit status `137`, recovered publication and notification, and
 passed the remaining checks. The disposable Compose resources, firewall
 tables, image tags, SDK fixture, and temporary test directories were removed.
+
+## Rustdoc Markdown sources
+
+On 2026-11-27, the Markdown source work based on `76a53cbd6ade` passed
+the offline Rust 1.100.0 gate. The conversion and registry tests covered
+public docstrings, paired glob grants, denied and out-of-scope spans, JSON
+format validation, gzip framing, and checksum-bound dependency records.
+
+Phase 0 and Phase 5 Compose passed on Linux amd64 with rootful Docker
+29.10.1 and Compose 5.8.0. The Phase 5 probe used the pinned TypeScript SDK
+2.4.0 with Node 26.13.1 and pnpm 12.23.0. Both native Git formats passed
+their search and history oracles. The Restricted Minikube smoke passed
+with Minikube 1.39.0, rootless Docker, and Kubernetes 1.37.0. Its SHA-256
+fixture exercised Markdown discovery, dual glob selection, reads, search,
+and denial of an excluded path through the normal MCP endpoint.
+
+The pinned docs.rs adapter built the synthetic Git crate and its
+checksum-bound registry dependency with nightly 2026-11-25 and Rustdoc
+JSON format 61. The rootless Docker build used the pinned docs.rs micro
+image and an offline, read-only Cargo dependency mount. The fixture's
+build script verified the docs.rs environment and absence of a database
+credential, canonical Git mount, Docker socket, and external IPv4
+route inside the build container.
+
+The first synthetic Rustdoc Compose attempts encountered a PostgreSQL
+backend kill while planning the scheduler query. Explicitly materializing
+the approved Git tips bounded planning. The corrected query passed under
+`gh_docs_sync` on an empty catalog and with a hosted approval.
+
+The corrected Rustdoc Compose probe passed with the real builder artifact
+and a synthetic TLS docs.rs endpoint. It covered populated schema 8 to 9
+migration and scoped database grants, mutual TLS, checksum-bound registry
+prefetch, lease retries and stale submission rejection, mixed-source
+search and cursor binding, exact byte reads, hosted refresh and
+deduplication, and revocation. Restoring the schema 9 backup in a fresh
+Compose deployment reproduced the Git Rustdoc document and preserved the
+hosted source revocation.
+
+The QEMU guest boot path remains unqualified. This host had no QEMU
+executable or provisioned guest image. The builder container and the
+authenticated Sync handoff were exercised locally as separate components.
+
+The disposable Compose stacks, Minikube profile, fixture image tags,
+and temporary builder state were removed after qualification.
