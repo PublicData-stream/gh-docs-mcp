@@ -82,8 +82,10 @@ A hosted input uses these exact coordinates.
 
 Sync checks the hosted artifact daily using the approved coordinates. A
 missing or invalid response leaves the last verified snapshot available.
-Changes to approved Markdown get a new snapshot digest. A prior hosted selector can
-continue for 24 hours after replacement while approval is current.
+Changes to approved Markdown get a new snapshot digest. While approval
+remains current, a prior hosted selector can still name its snapshot for up
+to 24 hours after replacement. Continuation cursors have the usual
+30-minute lifetime.
 
 A Git input names the repository and ref to follow. Set `workspace` to a
 repository-relative directory or omit it to select the root.
@@ -159,10 +161,11 @@ image without any service credentials or runner-control keys.
 Mount `rustdoc-server.crt`, `rustdoc-server.key`, and the dedicated
 `rustdoc-client-ca.crt` as Sync-only secrets. Set
 `DOCS_MCP_RUSTDOC_RUNNER_BIND` to the private Sync control address on port
-8785. Install the project firewall with `--control --rustdoc-runner` to
-permit the Compose host to reach this one listener. For a separate runner
-host, forward the private listener through a restricted SSH tunnel to the
-Compose host. Keep certificate hostname verification enabled through the
+8785. Use `scripts/phase2/egress.py install` with the project firewall
+inputs and `--control --rustdoc-runner` to permit the Compose host to
+reach this one listener. For a separate runner host, forward the private
+listener through a restricted SSH tunnel to the Compose host. Keep
+certificate hostname verification enabled through the
 tunnel. Give the runner supervisor the client certificate and its key plus the
 CA that signs the Sync certificate.
 
@@ -184,6 +187,8 @@ Use the [contributor workflow](../CONTRIBUTING.md) and the documented
 the fixture images with `scripts/phase8/fixtures.sh TAG --current-only`.
 Run the synthetic Rustdoc probe with
 `sudo -n python3 -B scripts/rustdoc/integration.py --image-tag TAG`.
+By default, the probe submits synthetic Rustdoc JSON over the authenticated
+runner connection and checks publication and restore.
 Pass `--builder-image /tmp/.../builder.qcow2` to run the real pinned builder
 on the synthetic registry dependency. A locally built synthetic JSON artifact
 can exercise publication with `--builder-json`. Run the [Phase 5 smoke](mcp.md#qualification)

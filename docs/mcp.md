@@ -2,15 +2,18 @@
 
 The normal serve entry point exposes stateless JSON over Streamable HTTP at
 `/mcp` on revision `2026-07-28`. A client can discover, list, or directly
-call tools using the pinned per-request metadata and headers. The TLS proxy
-preserves the checked Host and Origin and strips forwarding identity headers.
-The qualification proxy binds to loopback.
+call tools using the pinned per-request metadata and headers. The fixture
+proxy binds to host loopback, preserves Host and Origin, and removes
+forwarding identity headers. The OxiBelt release proxy overwrites forwarding
+headers. Serve verifies the configured proxy peer, normalized Host, effective
+TLS port and scheme before reconstructing Host. Serve validates Origin when
+present. [Release deployment](deployment.md#provision-and-start)
 
 The seven [exploration tools](exploration.md) retain their argument shapes.
 Reuse the exact four-field context from `git.resolve`. The
 [runtime schema snapshot](../apps/schemas/tools.json) also includes the five
-Git tools below and the four [Markdown tools](markdown.md). `docs-mcp-serve --tool-schemas` exports the registry without
-connecting to PostgreSQL.
+Git tools below and the four Markdown tools. `docs-mcp-serve --tool-schemas`
+exports the registry without connecting to PostgreSQL. [Markdown tools](markdown.md)
 
 Successful calls and tool errors carry structured JSON and equivalent JSON
 text. Tool errors set `isError` and carry a stable `code` and optional

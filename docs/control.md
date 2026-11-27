@@ -9,9 +9,10 @@ object store and PostgreSQL are authoritative for publication and reads.
 Apply the catalog migration during a maintenance window with publication
 writers stopped. Use the existing role UID, mount, and TLS configuration.
 Set `DOCS_MCP_CONTROL_ENABLED=1` to enable the control plane in Compose. With
-control disabled the roles provide their previous services and manual sync
-commands. Enabling control with an empty roster starts outbox delivery and
-schedules no repositories.
+control disabled the roles support manual sync commands. With an empty Git
+roster, enabling control starts outbox delivery without scheduling Git
+reconciliation. Rustdoc uses its own approvals and enable flag.
+[Rustdoc scheduling](markdown.md#approve-and-schedule-sources)
 
 Set `DOCS_MCP_SYNC_ROSTER_FILE` to an absolute path in sync's read-only inputs.
 The file is a JSON array of up to 128 canonical repository UUIDs. Register

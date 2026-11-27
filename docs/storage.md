@@ -29,31 +29,29 @@ single-link regular files, and allowed directory entries. Its Linux host needs
 mount semantics. Alternates, grafts, shallow state, promisor objects, symlinks,
 and configuration includes cause admission to fail.
 
-The canonical reader holds a shared repository lock through worker reap.
-Incoming reads run under the owning job or fixture process. The advisory-key
-registry reserves numbers below 1024 for other uses and allocates one key per
-typed lock scope. Future generation-aware admission, publication, and
+The canonical reader holds shared repository and generation locks through
+worker reap. Incoming reads run under the owning job or fixture process.
+The advisory-key registry reserves numbers below 1024 for other uses and
+allocates one key per typed lock scope. Admission, publication, and
 maintenance follow the order from the storage decision.
 [Storage and locking decision](decisions/0001-storage-identity-and-locking.md)
 
 ## Migration and visibility
 
-Run the existing one-shot `migrate` Compose service with its dedicated
-migrator credential. The runner applies the original foundation migration
-and then adds `git_catalog` in a separate transaction under the same
-migration advisory key. The catalog and its version row commit together.
-Reapplying the command preserves existing generations and ref snapshots.
-Back up the database before the upgrade. Application rollback can use the
-Phase 0 binaries with the additive schema in place. Use a coordinated restore
-to return to the prior database state.
+Run the one-shot `migrate` Compose service with its dedicated migrator
+credential. The runner applies the foundation migration and then applies
+pending catalog migrations in a transaction under the same advisory key.
+It checks for an ordered, supported migration history and applies migrations
+through `0009`. Reapplying the command preserves existing generations
+and ref snapshots. Take a coordinated backup before an upgrade.
+[Deployment rollback procedure](deployment.md#upgrade-and-rollback)
 
-Sync has scoped catalog reads and three fixture routines for registration,
-candidate creation, and final disposition. Registration requires a synthetic
-URN and an exact reviewed ref scope. Candidate IDs are allocated atomically
-per repository. A finished snapshot is immutable through the runtime role.
-Serve can query the visibility projection. Phase 1 fixture transactions leave
-the active generation, jobs, and outbox empty. Create later transitions and
-write grants with their owning phases.
+Sync has scoped catalog reads and writes. Candidate IDs are allocated
+atomically per repository. Serve queries the visibility projection. The
+Phase 1 qualification uses fixture routines for registration, candidate
+creation, and final disposition. Fixture registration requires a synthetic
+URN and an exact reviewed ref scope. The Phase 1 fixture transactions leave
+the active generation, jobs, and outbox empty.
 
 ## Reader contract
 
@@ -75,7 +73,7 @@ produce an indeterminate reachability result. Read qualification considers
 both native hash formats. HTTPS fetch and strict closure validation have
 their own gate.
 
-## Proposed manifest version 1
+## Manifest version 1
 
 Encode compact UTF-8 JSON with no trailing newline. All structured fields are
 ordered arrays. Use lowercase UUIDs and full lowercase hexadecimal OIDs,
@@ -88,9 +86,11 @@ envelope = ["gh-docs-manifest", 1, content, observation]
 content = [repository_uuid, source_uuid, object_format, policy_version,
            default_ref_base64, refs]
 refs = [[ref_base64, target_type, native_oid_hex, peeled_commit_hex_or_null], ...]
-observation = ["verified", "fixture_checks", observed_utc]
+observation = ["verified", verification_method, observed_utc]
 ```
 
+Use `fixture_checks` for offline verification and `https_git_checks` for
+verified Git synchronization.
 Render `observed_utc` in UTC with six fractional digits followed by `Z`.
 Hash canonical content with SHA-256 after the prefix
 `gh-docs-manifest-content-v1` and a NUL byte. Hash the canonical envelope with

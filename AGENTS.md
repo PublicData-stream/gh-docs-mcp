@@ -2,11 +2,11 @@
 
 ## Project Overview
 
-`docs-mcp` is a Rust workspace for private, read-only Git repository
-exploration over MCP. Phase 0 serves a synthetic fixture and qualifies the
-deployment with Docker Compose. Git data belongs in native bare object stores.
-PostgreSQL is the control plane. Keep the MCP revision pinned and scope
-credentials and filesystem access to each role.
+`docs-mcp` is a Rust workspace for private, read-only MCP access to approved
+Git repositories and Rustdoc Markdown. Git data belongs in native bare object
+stores. PostgreSQL coordinates publication and stores published Rustdoc
+Markdown. Use synthetic fixtures for qualification. Keep the MCP revision
+pinned and scope credentials and filesystem access to each role.
 
 ## Repository Structure
 
@@ -15,8 +15,8 @@ credentials and filesystem access to each role.
   PostgreSQL access, synchronization, and test support.
 - `migrations/` contains PostgreSQL schema and privilege definitions.
 - `Dockerfile` and `compose.yml` define the role images and local deployment.
-- `scripts/phase0/` contains the offline Rust gate, synthetic fixtures, and
-  Compose qualification probes. `.github/workflows/` contains hosted CI.
+- `scripts/` contains the offline Rust gate, synthetic fixtures, and
+  qualification probes. `.github/workflows/` contains hosted CI.
 - `docs/` contains architecture decisions, deployment prerequisites, and
   observed qualification results.
 

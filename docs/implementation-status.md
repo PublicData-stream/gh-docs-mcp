@@ -1016,11 +1016,12 @@ native qualification on both architectures. [OxiBelt releases](https://github.co
 ## Routine GitHub Actions CI
 
 [CI](../.github/workflows/ci.yml) runs the pinned Rust and release-helper
-checks, workflow lint, and synthetic Docker Compose Phases 0 and 5 on every
-push, pull request, and manual dispatch. The Compose jobs use native Linux
-amd64 and arm64 runners. Select `full_compose` when dispatching the workflow
-to run Phases 0–7 on both architectures. Failed Compose jobs attach the
-available host, build, and phase logs for seven days.
+checks, workflow lint, local Markdown link checks, and synthetic Docker
+Compose Phases 0 and 5 on every push, pull request, and manual dispatch.
+The Compose jobs use native Linux amd64 and arm64 runners. Select
+`full_compose` when dispatching the workflow to run Phases 0–7 on both
+architectures. Failed Compose jobs attach the available host, build, and
+phase logs for seven days.
 
 Release preflight checks the entire canonical main push run and the `rust`
 job for the exact tagged commit. Release candidate qualification exercises
@@ -1039,7 +1040,8 @@ rootful Docker `29.10.1`, Compose `5.8.0`, and ext4-backed `/tmp`.
 The SDK fixture used Node `26.13.1` and pnpm `12.23.0`. A missing-image
 run returned failure and produced diagnostics for both requested phases.
 Fixture tags, Compose resources, firewall rules, and generated fixture
-directories were removed. The new hosted CI matrix is pending its first run.
+directories were removed. The hosted CI matrix had yet to run when these
+local results were recorded.
 
 ## docs-mcp rename and cutover
 
@@ -1206,3 +1208,84 @@ The scoped Compose projects, firewall tables, registries, builders,
 fixture images, Minikube profile, and SDK fixture were removed. The
 local build receipt, test logs, restore record, and audit reports were
 retained under `/tmp`.
+
+## Code and documentation consistency
+
+On 2026-11-27, the consistency review used runtime revision
+`e82f371f88750`. The review compared the maintained documentation with the
+MCP tool registry, argument and configuration parsers, Compose deployment,
+database migrations and grants, and release scripts and workflows. The
+updates cover the catalog upgrade and rollback paths, reader fences, the
+manifest format, scheduler prerequisites, proxy authority checks, and the
+Rustdoc qualification procedure.
+
+The Rust 1.100.0 offline gate and all 15 release-helper tests passed. The
+release-helper run used a disposable loopback OCI registry. `actionlint`,
+`git diff --check`, and the new tracked Markdown link check passed. A
+disposable repository verified that the checker accepts valid file,
+directory, and heading links and reports broken destinations with file and
+line locations. The documentation review checked 26 shell snippets, nine
+JSON examples, and options for 26 Python CLI invocations. The example Git
+read and Markdown queries validated against the tracked request schemas.
+
+### Local deployment checks
+
+Rootful Docker Compose Phases 0–7 passed on Linux amd64, kernel
+7.0.0-44-generic, with Docker 29.10.1, Compose 5.8.0, and ext4-backed
+temporary storage. The SDK fixture used Node 26.13.1 and pnpm 12.23.0.
+The first Phase 2 run timed out during a one-shot approval registration.
+The full Phase 2 replay passed with the same fixture images and timeouts,
+including alternate-host approval and TLS hostname checks.
+
+The rename rehearsal upgraded a populated schema 7 catalog to schema 9,
+published a new Git generation and delivered its notification, and restored
+the verified schema 7 backup into fresh volumes. Retained Git reads and
+cursors worked across the upgrade and rollback.
+
+The Rustdoc Compose probe passed a populated schema 8-to-9 upgrade,
+authenticated runner handoff, synthetic hosted refresh, and publication and
+revocation with fixture Rustdoc JSON. An independent schema 9 restore
+reproduced the Git Rustdoc document and preserved the hosted revocation.
+QEMU guest execution remains unqualified. The host had no QEMU executable.
+
+The Phase 8 rehearsal used the exact native OCI images listed below. It
+passed backup verification, fresh restore, retained-generation rollback and
+notification delivery, and readback under the previous images with the
+matching backup. The candidate PostgreSQL image reopened the previous
+runtime's data directory. The release proxy passed the authority and
+forwarding checks, and an independent schema 9 restore preserved glob
+approval and excluded path denials.
+
+Both Restricted Minikube smokes passed with Minikube 1.39.0, Kubernetes
+1.37.0, rootless Docker 29.10.1, and containerd. Phase 5 exercised Git
+reads, search, and history for SHA-1 and SHA-256, plus the SHA-256
+Markdown tools and path exclusions.
+Phase 7 verified feed-to-MCP publication, framed worker denials, and
+failure to start a worker without confinement. Both profiles were removed.
+
+### Native amd64 release audit
+
+Two independent builds of `0.0.0-rc.1` reproduced these runnable OCI
+manifests for `e82f371f88750`.
+
+| Role | Runnable manifest digest |
+| --- | --- |
+| Serve | `sha256:cc7eaf1d4ab59cf52563fe0507124895d5a27898a1b9a1964345068635f61326` |
+| Sync | `sha256:1c689b510f5f4e70fb5675bdfa576ad940bed98fe1136c8fcb50f4023e294966` |
+| Feed | `sha256:0a47edab6ce694d63823c8a12fb018640db96439130751ad435b5cdc83f4623e` |
+| PostgreSQL | `sha256:75c971093190a24b323b2e86e1606a9668ad58f6aa620c4df6cf0f1e7420068d` |
+
+The exact-image audit blocked release. Trivy 0.76.2 used the
+2026-11-27 13:04 UTC database and reported six high findings in
+PostgreSQL's `libxml2` 2.13.9-r3. RustSec revision `c5279d0b0c9e` reported
+17 vulnerabilities in the pinned OxiBelt workspace and zero in the
+stamped workspace and ripgrep lockfiles. The yank checks reported
+incomplete crates.io index lookups. The signed native OxiBelt inventory
+failed the compiled Cargo dependency graph check. Native arm64 release
+qualification remains open.
+
+The timed-out Phase 2 run left a created migrator container, which was
+removed during scoped cleanup. The test Compose projects, firewall tables,
+registries, builders, image tags, Minikube profiles, and SDK fixture were
+removed. The test logs, native build and restore receipts, and audit reports
+were retained under `/tmp`.

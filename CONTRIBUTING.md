@@ -1,7 +1,7 @@
 # Contributing to docs-mcp
 
-`docs-mcp` is a private, read-only MCP service for Git repository
-exploration. Phase 0 qualifies the foundation with a synthetic fixture. Use
+`docs-mcp` is a private, read-only MCP service for approved Git repository
+exploration and Rustdoc Markdown. Use synthetic fixtures for qualification and
 repository-relative paths in documentation, issues, and pull request notes.
 Run commands from the repository root unless a procedure specifies another
 directory.
@@ -14,7 +14,7 @@ directory.
 | `apps/` | Role entry points and MCP transport and tool handling. | Startup, role behavior, or the MCP contract changes. |
 | `crates/core/`, `crates/git/`, and `crates/search/` | Shared configuration and the Git and search worker boundaries. | Common configuration, Git object access, worker confinement, or search behavior changes. |
 | `crates/storage/`, `crates/sync/`, and `migrations/` | PostgreSQL access, synchronization, schema, and grants. | Database access, storage coordination, sync behavior, or role privileges change. |
-| `crates/test-support/` and `scripts/phase0/` | Synthetic test support, offline checks, and qualification probes. | A check or fixture needs to cover new behavior. |
+| `crates/test-support/` and `scripts/` | Synthetic test support, offline checks, and qualification probes. | A check or fixture needs to cover new behavior. |
 | `Dockerfile` and `compose.yml` | Role images and the Compose deployment. | Image contents, service wiring, secrets, networks, or mounts change. |
 | `docs/` and `.github/workflows/` | Architecture decisions, qualification procedures and evidence, and hosted CI. | A design decision, operator procedure, observed gate result, or CI job changes. |
 
@@ -75,6 +75,9 @@ export CARGO_TARGET_DIR=/tmp/rust/target
 cargo fetch --locked
 scripts/phase0/check-rust.sh
 ```
+
+Run `python3 -B scripts/check-doc-links.py` to check relative links and heading
+anchors in tracked Markdown. CI runs the same check in the workflow lint job.
 
 Use synthetic fixtures. Generate disposable repositories, certificates, keys,
 configuration, and probe output under `/tmp`. Remove generated data after the

@@ -1,10 +1,10 @@
 # Private Git synchronization
 
-Phase 2 prepares verified candidates on a single Linux host. The operator
-invokes one reconciliation per repository. PostgreSQL records the source
-approval, job outcome, and private artifact. Phase 3 owns installation and
-publication. The production allowlist starts empty. Qualification uses
-synthetic sources only.
+Sync prepares verified candidates on a single Linux host. An operator can
+reconcile a repository manually or enroll it in durable scheduling.
+PostgreSQL records the source approval, job outcome, and private artifact.
+The production allowlist starts empty. Qualification uses synthetic sources.
+[Durable scheduling](control.md)
 
 ## Source approval
 
@@ -120,9 +120,9 @@ removes its oldest diagnostics when needed. Use the JSON job UUID and reason
 code to correlate outcomes with PostgreSQL, which is authoritative when a
 commit response is lost.
 
-Use the Phase 2 migrator after applying migration `0003`. Roll back the
-application binaries with the additive schema in place. Restore a coordinated
-database and private-store snapshot to roll back the schema.
+Use the one-shot migrator from the same revision as the roles. Take a
+coordinated backup before upgrading. Match the restored schema to the
+older roles. [Deployment rollback procedure](deployment.md#upgrade-and-rollback)
 
 A verified HTTPS candidate can be installed and published through the
 [Phase 3 operator workflow](publication.md). Reconciliation continues to stop

@@ -47,11 +47,12 @@ Keep the sanitized evidence.
 
 ### Rehearse the rename
 
-Build the current fixture images with `scripts/phase8/fixtures.sh "$tag" --current-only`.
+Choose a unique local `tag` and build the current fixture images with
+`scripts/phase8/fixtures.sh "$tag" --current-only`.
 Build the old roles from the last pre-rename source under the same unique
 local tag. The rehearsal uses the fixture Sync image to reach the synthetic
 upstream. Run from the repository root on the rootful Compose host.
-The rehearsal upgrades the populated schema 7 catalog to schema 8 and
+The rehearsal upgrades the populated schema 7 catalog to schema 9 and
 restores the verified schema 7 backup into fresh volumes for rollback.
 
 ```sh
@@ -74,12 +75,13 @@ removes its own Compose stack, firewall tables, and generated fixture data.
 ## Gate and operator review
 
 Release requires matched digests and passed native tests for both platforms,
-a verified independent restore, a reviewed dependency and license
-inventory, and disposition of critical and high audit findings. Assess
-infra findings against the exact image and effective runtime profile.
-A proxy update requires a clean RustSec result for the full released
-OxiBelt workspace lockfile and a signed native CycloneDX inventory from
-the pinned release workflow. The strict data plane application must have
+a verified independent restore, and a reviewed dependency and license
+inventory. The automated audit blocks on high or critical exact-image
+findings and RustSec vulnerabilities in the stamped workspace, ripgrep, or
+the full pinned OxiBelt workspace lockfile. Assess infrastructure findings
+against the exact image and effective runtime profile. The audit also
+requires a signed native CycloneDX inventory from the pinned OxiBelt
+release workflow. The strict data plane application must have
 a reachable Cargo dependency graph, matching name/version entries in the
 released lockfile, and CycloneDX compositions marking dependencies complete
 for the application and each reachable Cargo component. The audit keeps
