@@ -1160,3 +1160,49 @@ authenticated Sync handoff were exercised locally as separate components.
 
 The disposable Compose stacks, Minikube profile, fixture image tags,
 and temporary builder state were removed after qualification.
+
+## Signed build-tag publication
+
+On 2026-11-27, the build-tag workflow at `75359e393d39` passed actionlint
+1.17.1, the frozen Rust 1.100.0 gate, and all 15 release-helper tests.
+The loopback registry tests verified recovery after partial publication,
+conflicting digest rejection, anonymous pulls of both platform manifests,
+and stable-only promotion. Build preflight and a synthetic push replay
+verified the existing signed `2.0.0-build.e376dfc4` tag and its exact
+canonical CI run using GitHub's API. [Canonical CI run](https://github.com/PublicData-stream/docs-mcp/actions/runs/46002665783)
+
+Two independent builds of `2.0.0-build.75359e39` reproduced all four
+amd64 runnable OCI manifest digests on Linux 7.0.0-44-generic with rootful
+Docker 29.10.1, Compose 5.8.0, Buildx 0.39.1, and ext4-backed temporary
+storage. The locked SDK fixture used Node 26.13.1 and pnpm 12.23.0.
+
+Rootful Compose Phases 0–7 passed across the initial runs and targeted
+replays. Phase 1 initially expected the catalog to stop at migration 0008.
+Phase 4 initially expected Sync to lack the exploration view grant
+introduced by migration 0009. Both Compose probes passed after the
+fixture corrections in `6586505` and `deec018`, including the denial
+of updates to the view before and after the Phase 4 migration replay.
+
+The Phase 8 rehearsal confirmed the exact build tag in MCP discovery.
+It passed backup verification, fresh restore, rollback with matching
+data, previous-image compatibility, and reopening PostgreSQL with the
+candidate. Restoring a schema 9 backup preserved the glob approval and
+excluded path denials.
+
+The Restricted Phase 7 smoke passed with Minikube 1.39.0, Kubernetes
+1.37.0, and rootless Docker with containerd. It used the exact Serve and
+PostgreSQL manifests and verified feed-to-MCP delivery, framed worker
+denials, and profile cleanup.
+
+The exact-image audit blocked publication. Trivy 0.76.2 with its
+2026-11-27 13:04 UTC database reported six high findings in PostgreSQL's
+`libxml2` 2.13.9-r3. RustSec revision `c5279d0b0c9e` reported 17
+findings in the pinned OxiBelt workspace, with zero in the stamped
+workspace or ripgrep lockfiles. The signed OxiBelt inventory lacked a
+compiled Cargo dependency graph. Hosted native arm64 release
+qualification and anonymous GHCR verification remain pending.
+
+The scoped Compose projects, firewall tables, registries, builders,
+fixture images, Minikube profile, and SDK fixture were removed. The
+local build receipt, test logs, restore record, and audit reports were
+retained under `/tmp`.
