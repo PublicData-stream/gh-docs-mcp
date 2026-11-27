@@ -12,7 +12,7 @@ ripgrep_lock=${5:?Pass Cargo.lock from the Dockerfile-pinned ripgrep source arch
 test "${out#/tmp/}" != "$out"
 test "$(uname -m)" = x86_64
 mkdir "$out"
-work=$(mktemp -d /tmp/gh-docs-phase7-audit.XXXXXXXX)
+work=$(mktemp -d /tmp/docs-mcp-phase7-audit.XXXXXXXX)
 trap 'rm -rf -- "$work"' EXIT
 
 checksum=bc0fc726e017b8927a62b2d3531d7a84ee01769daf5c99ed866dced54089fdbf
@@ -59,7 +59,7 @@ for role in serve sync feed postgres proxy initializer; do
     case "$role" in
         proxy) image=$proxy ;;
         initializer) image=$initializer ;;
-        *) image=gh-docs-mcp-$role:$tag ;;
+        *) image=docs-mcp-$role:$tag ;;
     esac
     id=$("${docker[@]}" image inspect --format '{{.Id}}' "$image")
     printf '%s %s %s\n' "$role" "$image" "$id" >> "$out/images.txt"

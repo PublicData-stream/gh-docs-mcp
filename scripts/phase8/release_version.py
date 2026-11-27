@@ -17,14 +17,14 @@ VERSION = re.compile(rf"(?P<base>{NUMBER}\.{NUMBER}\.{NUMBER})(?:-(?P<kind>beta|
 CANDIDATE_VERSION = f"{SENTINEL}-rc.1"
 CARGO_INPUTS = ("Cargo.toml", "Cargo.lock")
 PRODUCTION = {
-    "apps": "gh-docs-mcp",
-    "crates/core": "gh-docs-core",
-    "crates/git": "gh-docs-git",
-    "crates/search": "gh-docs-search",
-    "crates/storage": "gh-docs-storage",
-    "crates/sync": "gh-docs-sync",
+    "apps": "docs-mcp",
+    "crates/core": "docs-mcp-core",
+    "crates/git": "docs-mcp-git",
+    "crates/search": "docs-mcp-search",
+    "crates/storage": "docs-mcp-storage",
+    "crates/sync": "docs-mcp-sync",
 }
-FIXTURE = {"crates/test-support": "gh-docs-test-support"}
+FIXTURE = {"crates/test-support": "docs-mcp-test-support"}
 VERSION_LINE = re.compile(r'(?m)^([ \t]*version[ \t]*=[ \t]*)"0\.0\.0"(?=[ \t]*(?:#[^\n]*)?$)')
 WORKSPACE_PACKAGE = re.compile(r"(?ms)^\[workspace\.package\][ \t]*\n.*?(?=^\[|\Z)")
 LOCK_PACKAGE = re.compile(r"(?m)(?=^\[\[package\]\][ \t]*$)")

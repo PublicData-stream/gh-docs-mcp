@@ -1,11 +1,11 @@
 use std::{collections::HashSet, path::Path, time::Duration};
 
-use gh_docs_core::{Result, required};
-use gh_docs_mcp::{
+use docs_mcp::{
     control::{self, Keys, Link, Reason, SyncRequested},
     health, health_listener,
 };
-use gh_docs_sync::observation::{self, Approval};
+use docs_mcp_core::{Result, required};
+use docs_mcp_sync::observation::{self, Approval};
 use tokio::time::Instant;
 use uuid::Uuid;
 
@@ -18,7 +18,11 @@ struct Poll {
 }
 
 impl Poll {
-    async fn run(&mut self, sender: &mut control::Client, fixture: Option<&gh_docs_sync::Fixture>) {
+    async fn run(
+        &mut self,
+        sender: &mut control::Client,
+        fixture: Option<&docs_mcp_sync::Fixture>,
+    ) {
         let Ok(now) = control::unix_seconds() else {
             return;
         };
@@ -60,7 +64,7 @@ impl Poll {
 }
 
 async fn run() -> Result<()> {
-    let mut approvals = match std::env::var("GH_DOCS_FEED_ROSTER_FILE") {
+    let mut approvals = match std::env::var("DOCS_MCP_FEED_ROSTER_FILE") {
         Ok(path) if !path.is_empty() => {
             control::config::<Vec<Approval>>(Path::new(&path), 1024 * 1024)?
         }
@@ -88,7 +92,7 @@ async fn run() -> Result<()> {
     }
     let fixture = control::fixture()?;
     let mut sender = control::Client::new(
-        control::address(&required("GH_DOCS_FEED_SYNC_ADDR")?)?,
+        control::address(&required("DOCS_MCP_FEED_SYNC_ADDR")?)?,
         Link::FeedSync,
         Keys::load(Link::FeedSync)?,
     );

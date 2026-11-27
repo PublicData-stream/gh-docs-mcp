@@ -84,14 +84,18 @@ class Wire:
             assert content["code"] == error, result
         return content
 
-    def validate_registry(self, host_rejection=403):
+    def validate_registry(self, host_rejection=403, *, legacy=False):
         assert self.send("server/discover", {})["result"]["supportedVersions"] == [VERSION]
-        registry = self.send("tools/list", {})["result"]["tools"]
+        result = self.send("tools/list", {})["result"]
+        expected_name = "gh-docs-mcp" if legacy else "docs-mcp"
+        assert result["_meta"]["io.modelcontextprotocol/serverInfo"]["name"] == expected_name
+        registry = result["tools"]
         self.tools = {tool["name"]: tool for tool in registry}
         assert len(self.tools) == len(registry) == 12
         snapshot = json.loads((ROOT / "apps/schemas/tools.json").read_text())
         assert registry == snapshot
-        assert json.loads(self.stack.exec("serve", "gh-docs-serve", "--tool-schemas").stdout) == snapshot
+        serve = "gh-docs-serve" if legacy else "docs-mcp-serve"
+        assert json.loads(self.stack.exec("serve", serve, "--tool-schemas").stdout) == snapshot
         for tool in registry:
             assert tool["annotations"]["readOnlyHint"]
             Draft202012Validator.check_schema(tool["inputSchema"])
@@ -264,9 +268,9 @@ def budgets(wire, repo, proof):
             break
     assert 1 < len(chunks) < 10 and cursor is None
     assert "".join(chunks) == "\u0001" * 32768
-    proof_command = wire.stack.exec("serve", "gh-docs-search-worker", "--probe-denials")
+    proof_command = wire.stack.exec("serve", "docs-mcp-search-worker", "--probe-denials")
     assert "inherited descriptors and denial controls passed" in proof_command.stdout
-    assert wire.stack.exec("serve", "gh-docs-search-worker", "--fail-setup").stdout == "-"
+    assert wire.stack.exec("serve", "docs-mcp-search-worker", "--fail-setup").stdout == "-"
 
     slow = wire.resolve(repo, proof["slow"])
     request = {"name": "git.rg", "arguments": {"context": slow, "pattern": "z{512}"}}
@@ -276,7 +280,7 @@ def budgets(wire, repo, proof):
         for _ in range(2):
             clients.append(wire.start("tools/call", request))
             command = """for _ in $(seq 1 100); do
-              for pid in $(pgrep -f '^/usr/local/bin/gh-docs-search-worker$'); do
+              for pid in $(pgrep -f '^/usr/local/bin/docs-mcp-search-worker$'); do
                 if grep -q '^State:[[:space:]]*T' "/proc/$pid/status"; then continue; fi
                 if kill -STOP "$pid" 2>/dev/null; then echo "$pid"; exit; fi
               done
@@ -357,7 +361,7 @@ def main():
     parser.add_argument("--client-dir", type=Path, required=True)
     args = parser.parse_args()
     print(f"{datetime.now(timezone.utc).isoformat()} Phase 5 Compose qualification", flush=True)
-    with phase2.stack(args.image_tag, publication=True, fixture_setup=prepare, serve_target="mcp-serve") as (
+    with phase2.stack(args.image_tag, publication=True, fixture_setup=prepare, serve_target="serve") as (
             stack, upstream, config, endpoint):
         wire = Wire(stack)
         wire.validate_registry()

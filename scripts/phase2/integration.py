@@ -29,8 +29,8 @@ APPROVAL = "/phase2-approval.json"
 
 @contextmanager
 def stack(tag, *, publication=False, fixture_setup=prepare, serve_target=None, control=False):
-    phase = 6 if control else 5 if serve_target == "mcp-serve" else 4 if serve_target == "phase4-serve" else 3 if publication else 2
-    project = f"ghdocs{phase}-{secrets.token_hex(5)}"
+    phase = 6 if control else 5 if serve_target == "serve" else 4 if serve_target == "phase4-serve" else 3 if publication else 2
+    project = f"docsmcp{phase}-{secrets.token_hex(5)}"
     root = Path(tempfile.mkdtemp(prefix=f"{project}-", dir="/tmp"))
     table = project.replace("-", "_")
     instance = phase0.Stack(root, project, tag)
@@ -45,17 +45,17 @@ def stack(tag, *, publication=False, fixture_setup=prepare, serve_target=None, c
     override = root / "phase2.json"
     sync = "phase6-sync" if control else "phase3-sync" if publication else "phase2-sync"
     serve_target = serve_target or ("phase3-serve" if publication else None)
-    serve = {"serve": {"image": f"gh-docs-{serve_target}:{tag}"}} if serve_target else {}
+    serve = {"serve": {"image": f"docs-mcp-{serve_target}:{tag}"}} if serve_target else {}
     services = {
         **serve,
         "sync": {
-            "image": f"gh-docs-{sync}:{tag}",
+            "image": f"docs-mcp-{sync}:{tag}",
             "extra_hosts": {HOST: address},
             "volumes": [{"type": "bind", "source": str(upstream / "tls/ca.crt"), "target": CA, "read_only": True}],
         },
         "migrate": {"volumes": [{"type": "bind", "source": str(approval_path), "target": APPROVAL, "read_only": True}]},
         "upstream": {
-            "image": f"gh-docs-phase2-upstream:{tag}", "user": "10002:10002",
+            "image": f"docs-mcp-phase2-upstream:{tag}", "user": "10002:10002",
             "cap_drop": ["ALL"], "security_opt": ["no-new-privileges:true"],
             "read_only": True, "pids_limit": 64, "mem_limit": "256m",
             "networks": {"sync_egress": {"ipv4_address": address}},
@@ -112,17 +112,17 @@ def configure_control(stack, services, tag, upstream, address):
         (directory / "fault").touch()
         (directory / "roster.json").write_text("[]")
         config = services.setdefault(role, {})
-        config["image"] = f"gh-docs-phase6-{role}:{tag}"
+        config["image"] = f"docs-mcp-phase6-{role}:{tag}"
         config["environment"] = {
-            "GH_DOCS_CONTROL_ENABLED": "1",
-            "GH_DOCS_PHASE6_FAULT_FILE": "/run/secrets/fault",
+            "DOCS_MCP_CONTROL_ENABLED": "1",
+            "DOCS_MCP_PHASE6_FAULT_FILE": "/run/secrets/fault",
         }
         if role in ("sync", "feed"):
             host = address if role == "sync" else feed_address
             config["environment"].update({
-                f"GH_DOCS_{role.upper()}_ROSTER_FILE": "/run/secrets/roster.json",
-                "GH_DOCS_PHASE6_UPSTREAM": f"{host}:8443",
-                "GH_DOCS_PHASE6_UPSTREAM_CA": CA,
+                f"DOCS_MCP_{role.upper()}_ROSTER_FILE": "/run/secrets/roster.json",
+                "DOCS_MCP_PHASE6_UPSTREAM": f"{host}:8443",
+                "DOCS_MCP_PHASE6_UPSTREAM_CA": CA,
             })
             if role == "feed":
                 config["volumes"] = [{"type": "bind", "source": str(upstream / "tls/ca.crt"),
@@ -157,8 +157,8 @@ def register(stack, path, policy):
 
 
 def fetch(stack, repository, endpoint, ca=CA, *, reason=None, env=()):
-    debug = ("-e", "GH_DOCS_PHASE2_DEBUG=1") if os.environ.get("GH_DOCS_PHASE2_DEBUG") == "1" else ()
-    command = ["exec", "-T", *debug, *env, "sync", "gh-docs-phase2-fixture", repository, endpoint, ca]
+    debug = ("-e", "DOCS_MCP_PHASE2_DEBUG=1") if os.environ.get("DOCS_MCP_PHASE2_DEBUG") == "1" else ()
+    command = ["exec", "-T", *debug, *env, "sync", "docs-mcp-phase2-fixture", repository, endpoint, ca]
     response = stack.compose(*command, expected=0 if reason is None else None, timeout=100)
     reports = [json.loads(line) for line in response.stdout.splitlines() if line.startswith("{")]
     assert len(reports) == 1, response.stdout
@@ -205,8 +205,8 @@ def assert_private(stack):
 
 
 def interruption(stack, repository, endpoint, control, point):
-    result = stack.compose("exec", "-T", "-e", f"GH_DOCS_FIXTURE_FAULT={point}", "sync",
-                           "gh-docs-phase2-fixture", repository, endpoint, CA, expected=None, timeout=100)
+    result = stack.compose("exec", "-T", "-e", f"DOCS_MCP_FIXTURE_FAULT={point}", "sync",
+                           "docs-mcp-phase2-fixture", repository, endpoint, CA, expected=None, timeout=100)
     assert result.returncode and "fixture reconciliation failed" in result.stdout, result.stdout
     last = sql(stack, f"""SELECT j.job_id, j.state, coalesce(p.state,'')
         FROM git_catalog.sync_jobs j LEFT JOIN git_catalog.private_candidates p USING(job_id)
@@ -239,7 +239,7 @@ def concurrent_admission(stack, repository, endpoint, upstream):
         git(origin, "update-ref", "refs/heads/main", commit(origin, f"{fmt} delayed update")[0])
     (upstream / "mode").write_text("delay")
     def command(repo):
-        return [*stack.compose_command, "exec", "-T", "sync", "gh-docs-phase2-fixture", repo, endpoint, CA]
+        return [*stack.compose_command, "exec", "-T", "sync", "docs-mcp-phase2-fixture", repo, endpoint, CA]
     processes = [
         subprocess.Popen(command(repo), env=stack.context, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
         for repo in (repository, other)
@@ -252,16 +252,16 @@ def concurrent_admission(stack, repository, endpoint, upstream):
         else:
             raise RuntimeError("concurrent jobs did not occupy both slots")
         # Check global admission before the repository fence's timed wait.
-        third = stack.exec("sync", "gh-docs-phase2-fixture", "11111111-2222-4333-8444-000000000003", endpoint, CA,
+        third = stack.exec("sync", "docs-mcp-phase2-fixture", "11111111-2222-4333-8444-000000000003", endpoint, CA,
                            expected=None)
         assert third.returncode and '"reason":"global_limit"' in third.stdout, third.stdout
-        same = stack.exec("sync", "gh-docs-phase2-fixture", repository, endpoint, CA, expected=None)
+        same = stack.exec("sync", "docs-mcp-phase2-fixture", repository, endpoint, CA, expected=None)
         assert same.returncode and '"reason":"repository_writer"' in same.stdout, same.stdout
         # Revoke an admitted job while the synthetic endpoint is slow.
         stack.compose("run", "--rm", "--no-deps", "migrate", "--revoke-source", "--source", REPOS["sha256"][1])
         stack.exec("sync", "sh", "-ec",
                    "for proc in /proc/[0-9]*/cmdline; do "
-                   "if tr '\\000' ' ' <\"$proc\" 2>/dev/null | grep -Eq \"^(/usr/local/bin/)?gh-docs-phase2-fixture $1 \"; "
+                   "if tr '\\000' ' ' <\"$proc\" 2>/dev/null | grep -Eq \"^(/usr/local/bin/)?docs-mcp-phase2-fixture $1 \"; "
                    "then pid=${proc#/proc/}; kill -TERM \"${pid%/cmdline}\"; fi; done",
                    "cancel-fixture", repository)
         (upstream / "mode").write_text("normal")
@@ -291,11 +291,11 @@ def qualify(args):
             return
 
         repo, source = REPOS["sha1"]
-        probe = instance.exec("sync", "gh-docs-phase2-fixture", "--confinement-probe")
+        probe = instance.exec("sync", "docs-mcp-phase2-fixture", "--confinement-probe")
         print(probe.stdout.strip(), flush=True)
-        ssrf = instance.exec("sync", "gh-docs-sync", "--reconcile", "--repository", repo, expected=None, timeout=25)
+        ssrf = instance.exec("sync", "docs-mcp-sync", "--reconcile", "--repository", repo, expected=None, timeout=25)
         assert ssrf.returncode and '"reason":"destination_denied"' in ssrf.stdout, ssrf.stdout
-        bad_ca = instance.exec("sync", "gh-docs-phase2-fixture", repo, endpoint,
+        bad_ca = instance.exec("sync", "docs-mcp-phase2-fixture", repo, endpoint,
                                "/run/secrets/db-ca.crt", expected=None, timeout=25)
         assert bad_ca.returncode and '"reason":"upstream_connection_or_tls"' in bad_ca.stdout, bad_ca.stdout
         for role in ("serve", "feed"):
@@ -371,10 +371,10 @@ def qualify(args):
         register(instance, approval_file, approval("sha1", version=5, deadline=1))
         fetch(instance, repo, endpoint, reason={"deadline"})
         register(instance, approval_file, approval("sha1", version=6))
-        fetch(instance, repo, endpoint, reason={"storage_quota"}, env=("-e", "GH_DOCS_SYNC_QUOTA_BYTES=402653184"))
+        fetch(instance, repo, endpoint, reason={"storage_quota"}, env=("-e", "DOCS_MCP_SYNC_QUOTA_BYTES=402653184"))
         concurrent_admission(instance, repo, endpoint, upstream)
         instance.compose("run", "--rm", "--no-deps", "migrate", "--revoke-source", "--source", source)
-        denied = instance.exec("sync", "gh-docs-phase2-fixture", repo, endpoint, CA, expected=None)
+        denied = instance.exec("sync", "docs-mcp-phase2-fixture", repo, endpoint, CA, expected=None)
         assert denied.returncode and "no active HTTPS approval" in denied.stdout, denied.stdout
         assert_private(instance)
         print("A07 and Phase 2 A08 synthetic qualification passed", flush=True)

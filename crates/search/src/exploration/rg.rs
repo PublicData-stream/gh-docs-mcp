@@ -1,8 +1,8 @@
 use std::io;
 
-use gh_docs_core::git::{BytePath, ByteString, ObjectType};
-use gh_docs_git::reader::{Reader, TreeMode};
-use gh_docs_storage::publication::Generation;
+use docs_mcp_core::git::{BytePath, ByteString, ObjectType};
+use docs_mcp_git::reader::{Reader, TreeMode};
+use docs_mcp_storage::publication::Generation;
 use serde_json::{Value, json};
 use tokio::sync::OwnedSemaphorePermit;
 use tokio_postgres::Client;

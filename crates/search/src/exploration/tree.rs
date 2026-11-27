@@ -2,11 +2,11 @@
 
 use std::{collections::HashMap, rc::Rc};
 
-use gh_docs_core::{
+use docs_mcp_core::{
     exploration::Policy,
     git::{BytePath, Oid},
 };
-use gh_docs_git::reader::{Batch, TreeEntry, TreeMode};
+use docs_mcp_git::reader::{Batch, TreeEntry, TreeMode};
 use serde_json::json;
 
 use super::{Error, matcher::Matcher, page::Entries};
@@ -97,7 +97,7 @@ impl<'a, 'reader> Tree<'a, 'reader> {
     pub fn blob(&mut self, oid: Oid) -> Result<Vec<u8>, Error> {
         Ok(self
             .batch
-            .contents(oid, gh_docs_core::git::ObjectType::Blob)?)
+            .contents(oid, docs_mcp_core::git::ObjectType::Blob)?)
     }
 
     fn navigation(&mut self, oid: Oid, path: &[u8]) -> Result<bool, Error> {

@@ -153,7 +153,7 @@ def ready(stack, role):
 
 
 def operator(stack, command, repo, *args, **kwargs):
-    return stack.exec("sync", "gh-docs-sync", command, "--repository", repo, *args, **kwargs)
+    return stack.exec("sync", "docs-mcp-sync", command, "--repository", repo, *args, **kwargs)
 
 
 def advance(upstream, label):
@@ -199,9 +199,9 @@ def rotation(stack):
     previous_key.chmod(0o400)
     os.chown(previous_key, 10001, 10001)
     expires = int(time.time()) + 30
-    stack.context.update(GH_DOCS_SYNC_SERVE_KEY_ID="v2", GH_DOCS_SYNC_SERVE_PREVIOUS_KEY_ID="v1",
-                         GH_DOCS_SYNC_SERVE_PREVIOUS_KEY_FILE="/run/secrets/sync-serve.previous.key",
-                         GH_DOCS_SYNC_SERVE_PREVIOUS_KEY_EXPIRES=str(expires))
+    stack.context.update(DOCS_MCP_SYNC_SERVE_KEY_ID="v2", DOCS_MCP_SYNC_SERVE_PREVIOUS_KEY_ID="v1",
+                         DOCS_MCP_SYNC_SERVE_PREVIOUS_KEY_FILE="/run/secrets/sync-serve.previous.key",
+                         DOCS_MCP_SYNC_SERVE_PREVIOUS_KEY_EXPIRES=str(expires))
     stack.compose("up", "-d", "--no-build", "--pull", "never", "--force-recreate", "--no-deps", "serve")
     ready(stack, "serve")
     old_sender = Link(stack, "sync", key=old, key_id="v1")
@@ -213,7 +213,7 @@ def rotation(stack):
     active.write_bytes(old)
     previous_key.unlink()
     for suffix in ("KEY_ID", "PREVIOUS_KEY_ID", "PREVIOUS_KEY_FILE", "PREVIOUS_KEY_EXPIRES"):
-        stack.context.pop("GH_DOCS_SYNC_SERVE_" + suffix)
+        stack.context.pop("DOCS_MCP_SYNC_SERVE_" + suffix)
     stack.compose("up", "-d", "--no-build", "--pull", "never", "--force-recreate", "--no-deps", "serve")
     print("A18 receiver-first rotation and previous-key expiry passed", flush=True)
 
@@ -264,7 +264,7 @@ def run(stack, upstream, config, endpoint):
     wait(lambda: sequence(stack, sha256) == 1, seconds=140)
     wait(lambda: delivered(stack, first))
     wait(lambda: phase2.sql(stack, "SELECT count(*) FROM git_catalog.scheduled_jobs WHERE state <> 'finished'") == "0")
-    second_owner = stack.exec("sync", "gh-docs-sync", expected=None)
+    second_owner = stack.exec("sync", "docs-mcp-sync", expected=None)
     assert second_owner.returncode and "scheduler is already owned" in second_owner.stdout, second_owner.stdout
 
     link = Link(stack)

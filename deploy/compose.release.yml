@@ -1,25 +1,25 @@
 services:
   serve:
-    image: "${GH_DOCS_SERVE_IMAGE:?Use the qualified release receipt}"
+    image: "${DOCS_MCP_SERVE_IMAGE:?Use the qualified release receipt}"
     build: !reset null
     environment:
-      MCP_HOST: "${GH_DOCS_MCP_AUTHORITY:?}"
-      MCP_ORIGIN: "https://${GH_DOCS_MCP_AUTHORITY:?}"
+      MCP_HOST: "${DOCS_MCP_AUTHORITY:?}"
+      MCP_ORIGIN: "https://${DOCS_MCP_AUTHORITY:?}"
       MCP_PROXY_IP: "${PROXY_IP:?}"
 
   sync:
-    image: "${GH_DOCS_SYNC_IMAGE:?Use the qualified release receipt}"
+    image: "${DOCS_MCP_SYNC_IMAGE:?Use the qualified release receipt}"
     build: !reset null
 
   feed:
-    image: "${GH_DOCS_FEED_IMAGE:?Use the qualified release receipt}"
+    image: "${DOCS_MCP_FEED_IMAGE:?Use the qualified release receipt}"
     build: !reset null
 
   migrate:
-    image: "${GH_DOCS_SYNC_IMAGE:?Use the qualified release receipt}"
+    image: "${DOCS_MCP_SYNC_IMAGE:?Use the qualified release receipt}"
 
   postgres:
-    image: "${GH_DOCS_POSTGRES_IMAGE:?Use the qualified release receipt}"
+    image: "${DOCS_MCP_POSTGRES_IMAGE:?Use the qualified release receipt}"
     build: !reset null
 
   proxy:

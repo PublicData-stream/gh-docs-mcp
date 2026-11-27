@@ -16,7 +16,7 @@ from smart_fixtures import REPOS, approval, prepare, run
 
 
 ROOT = Path(__file__).resolve().parents[2]
-NAMESPACE = "gh-docs-phase2"
+NAMESPACE = "docs-mcp-phase2"
 
 
 def as_b64(value):
@@ -114,7 +114,7 @@ def resources(root, sync, upstream, postgres, serve=None, *, explore=False, wire
         container("postgres", postgres, 70, ["/bin/sh", "-ec",
             "umask 077; cp /run/secrets/server.key /run/postgresql/server.key; "
             "chmod 600 /run/postgresql/server.key; "
-            "exec gh-docs-postgres-entrypoint postgres -c listen_addresses=127.0.0.1 "
+            "exec docs-mcp-postgres-entrypoint postgres -c listen_addresses=127.0.0.1 "
             "-c ssl=on -c ssl_cert_file=/run/secrets/server.crt -c ssl_key_file=/run/postgresql/server.key"],
             [mount("postgres-auth", "/run/secrets", True), mount("pgdata", "/pgdata"),
              mount("postgres-run", "/run/postgresql"),
@@ -127,14 +127,14 @@ def resources(root, sync, upstream, postgres, serve=None, *, explore=False, wire
             [mount("upstream-data", "/fixture", True)],
             sidecar=["wget", "-qO", "/dev/null", "http://127.0.0.1:8088/health"]),
         container("registration", sync, 10004, ["/bin/sh", "-ec",
-            "gh-docs-sync --migrate; "
-            "gh-docs-sync --register-source --approval-file /fixtures/sha1.json; "
-            "gh-docs-sync --register-source --approval-file /fixtures/sha256.json"],
+            "docs-mcp-sync --migrate; "
+            "docs-mcp-sync --register-source --approval-file /fixtures/sha1.json; "
+            "docs-mcp-sync --register-source --approval-file /fixtures/sha256.json"],
             [mount("migration-auth", "/run/secrets", True), mount("configuration", "/fixtures", True)],
             env=db_client),
     ]
-    commands = ["gh-docs-phase2-fixture --confinement-probe", *[
-        f"gh-docs-phase2-fixture {repo} 127.0.0.1:8443 /run/secrets/upstream-ca.crt"
+    commands = ["docs-mcp-phase2-fixture --confinement-probe", *[
+        f"docs-mcp-phase2-fixture {repo} 127.0.0.1:8443 /run/secrets/upstream-ca.crt"
         for repo, _ in REPOS.values()
     ]]
     commands.append("test \"$(find /git-sync-private/incoming -name manifest.json | wc -l)\" -eq 2")
@@ -142,7 +142,7 @@ def resources(root, sync, upstream, postgres, serve=None, *, explore=False, wire
     sync_container = container("reconcile", sync, 10002, ["/bin/sh", "-ec", "; ".join(commands)],
         [mount("sync-auth", "/run/secrets", True), mount("canonical", "/git-store", subpath="role"),
          mount("private", "/git-sync-private", subpath="role"), mount("scratch", "/git-sync-scratch/1")],
-        "3Gi", "2", {**db_client, "GH_DOCS_SYNC_CONCURRENCY": "1"})
+        "3Gi", "2", {**db_client, "DOCS_MCP_SYNC_CONCURRENCY": "1"})
     volumes = [
         {"name": name, "secret": {"secretName": credential}}
         for name, credential in [("fixture-bundle", "fixture-bundle"), ("postgres-auth", "postgres"),
@@ -154,7 +154,7 @@ def resources(root, sync, upstream, postgres, serve=None, *, explore=False, wire
         # This local smoke shares an emptyDir for handoff; Docker Compose
         # remains the role isolation and fault-injection qualification.
         publish = [
-            f"gh-docs-sync --{cmd} --repository {repo} {extra}"
+            f"docs-mcp-sync --{cmd} --repository {repo} {extra}"
             for repo, _ in REPOS.values()
             for cmd, extra in (("prepare", "--generation 0"), ("publish", "--generation 0 --expect-sequence 0"),
                                ("recover", ""))
@@ -163,7 +163,7 @@ def resources(root, sync, upstream, postgres, serve=None, *, explore=False, wire
         sync_container["volumeMounts"].append(mount("handoff", "/handoff"))
         oracle = [json.loads((fixture / f"{fmt}-oracle.json").read_text()) for fmt in REPOS]
         reads = [] if wire else [
-            f"gh-docs-phase3-fixture read {repo} active {proof['initial']}"
+            f"docs-mcp-phase3-fixture read {repo} active {proof['initial']}"
             for (repo, _), proof in zip(REPOS.values(), oracle, strict=True)
         ]
         serve_command = ["test ! -w /git-store", "test ! -r /git-store/.publication",
@@ -186,13 +186,13 @@ def resources(root, sync, upstream, postgres, serve=None, *, explore=False, wire
                     "range": {"start": 0, "end": 32}, "encoding": "base64"}}
                 expected = as_b64((fixture / f"{fmt}-oracle.bin").read_bytes()[:32])
                 serve_command.append(
-                    f"printf '%s' {shlex.quote(json.dumps(request))} | gh-docs-phase4-fixture | "
+                    f"printf '%s' {shlex.quote(json.dumps(request))} | docs-mcp-phase4-fixture | "
                     f"grep -F {shlex.quote(json.dumps('data') + ':' + json.dumps(expected))}")
         if wire:
             serve_env.update(MCP_BIND="127.0.0.1:8080", MCP_HOST="127.0.0.1:8080",
                              MCP_ORIGIN="http://127.0.0.1:8080", HEALTH_BIND="127.0.0.1:8081")
             serve_command[0:0] = [
-                """gh-docs-serve & server=$!; trap 'kill "$server"; wait "$server" || true' EXIT""",
+                """docs-mcp-serve & server=$!; trap 'kill "$server"; wait "$server" || true' EXIT""",
                 "timeout 15 sh -c 'until wget -qO /dev/null http://127.0.0.1:8081/healthz 2>/dev/null; do sleep 1; done'",
             ]
         containers.append(container("read", serve, 10001, ["/bin/sh", "-ec",
@@ -245,7 +245,7 @@ def wire_commands(fmt, context, phrase):
 
 def smoke(args, serve=None, *, explore=False, wire=False, control=None, extra_logs=(), phase=None):
     phase = phase or (6 if control else 5 if wire else 4 if explore else 3 if serve else 2)
-    profile = f"ghdocs{phase}-{secrets.token_hex(5)}"
+    profile = f"docsmcp{phase}-{secrets.token_hex(5)}"
     root = Path(tempfile.mkdtemp(prefix=f"{profile}-minikube-", dir="/tmp"))
     environment = {**os.environ, "MINIKUBE_HOME": str(root), "KUBECONFIG": str(root / "kubeconfig"),
                    "TMPDIR": str(root), "DOCKER_CONTEXT": "rootless", "MINIKUBE_IN_STYLE": "false"}
@@ -318,6 +318,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--sync-image", required=True)
     parser.add_argument("--upstream-image", required=True)
-    parser.add_argument("--postgres-image", required=True, help="local gh-docs-mcp-postgres image")
+    parser.add_argument("--postgres-image", required=True, help="local docs-mcp-postgres image")
     parser.add_argument("--bootstrap-cache", type=Path)
     smoke(parser.parse_args())

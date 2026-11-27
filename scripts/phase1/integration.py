@@ -24,7 +24,7 @@ sys.path.insert(0, str(ROOT / "scripts/phase0"))
 import firewall
 import integration as phase0
 
-FIXTURE = ["gh-docs-phase1-fixture"]
+FIXTURE = ["docs-mcp-phase1-fixture"]
 ORACLE = "/phase1-oracle.json"
 RUN = phase0.run
 DOCKER = phase0.DOCKER
@@ -32,7 +32,7 @@ DOCKER = phase0.DOCKER
 
 @contextmanager
 def stack(tag, variant, fixtures=False):
-    project = f"ghdocs1-{variant}-{secrets.token_hex(4)}"
+    project = f"docsmcp1-{variant}-{secrets.token_hex(4)}"
     root = Path(tempfile.mkdtemp(prefix=f"{project}-", dir="/tmp"))
     table = project.replace("-", "_")
     instance = None
@@ -49,7 +49,7 @@ def stack(tag, variant, fixtures=False):
             override = root / "phase1.json"
             override.write_text(json.dumps({"services": {
                 role: {
-                    "image": f"gh-docs-phase1-{role}:{tag}",
+                    "image": f"docs-mcp-phase1-{role}:{tag}",
                     "volumes": [{
                         "type": "bind", "source": str(root / "oracle.json"),
                         "target": ORACLE, "read_only": True,
@@ -311,8 +311,8 @@ def main():
     print(RUN(["git", "-c", f"safe.directory={ROOT}", "rev-parse", "HEAD"]).stdout.strip(), flush=True)
     print(RUN([*DOCKER, "version", "--format", "{{.Server.Version}} {{.Server.Arch}}"]).stdout.strip(), flush=True)
     print(RUN([*DOCKER, "compose", "version"]).stdout.strip(), flush=True)
-    images = [f"gh-docs-mcp-{name}:{args.image_tag}" for name in ("serve", "sync", "feed", "postgres")]
-    images += [f"gh-docs-phase1-{name}:{args.image_tag}" for name in ("serve", "sync")]
+    images = [f"docs-mcp-{name}:{args.image_tag}" for name in ("serve", "sync", "feed", "postgres")]
+    images += [f"docs-mcp-phase1-{name}:{args.image_tag}" for name in ("serve", "sync")]
     print(RUN([*DOCKER, "image", "inspect", "--format", "{{.Id}} {{join .RepoTags \", \"}}", *images]).stdout,
           end="", flush=True)
     upgrade(args.image_tag)

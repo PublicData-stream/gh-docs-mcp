@@ -54,7 +54,7 @@ def probe(port, ca):
         result = response.get("result", {})
         assert status == 200 and response.get("id") == 1, (status, response)
         assert result["resultType"] == "complete", response
-        assert result.get("_meta", {}).get(PREFIX + "serverInfo", {}).get("name") == "gh-docs-mcp", response
+        assert result.get("_meta", {}).get(PREFIX + "serverInfo", {}).get("name") == "docs-mcp", response
         return result
 
     def reject(status, code=None, body=None, **kwargs):

@@ -1,6 +1,6 @@
-# Contributing to gh-docs-mcp
+# Contributing to docs-mcp
 
-`gh-docs-mcp` is a private, read-only MCP service for Git repository
+`docs-mcp` is a private, read-only MCP service for Git repository
 exploration. Phase 0 qualifies the foundation with a synthetic fixture. Use
 repository-relative paths in documentation, issues, and pull request notes.
 Run commands from the repository root unless a procedure specifies another

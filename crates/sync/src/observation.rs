@@ -2,7 +2,7 @@
 
 use std::{collections::BTreeMap, time::Duration};
 
-use gh_docs_core::{
+use docs_mcp_core::{
     Result,
     git::{ObjectFormat, Oid, RefName},
 };

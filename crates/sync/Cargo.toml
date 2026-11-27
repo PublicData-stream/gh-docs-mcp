@@ -1,5 +1,5 @@
 [package]
-name = "gh-docs-sync"
+name = "docs-mcp-sync"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -9,9 +9,9 @@ publish.workspace = true
 [dependencies]
 base64.workspace = true
 chrono.workspace = true
-gh-docs-core = { path = "../core" }
-gh-docs-storage = { path = "../storage" }
-gh-docs-git = { path = "../git" }
+docs-mcp-core = { path = "../core" }
+docs-mcp-storage = { path = "../storage" }
+docs-mcp-git = { path = "../git" }
 hickory-resolver.workspace = true
 libc.workspace = true
 reqwest.workspace = true

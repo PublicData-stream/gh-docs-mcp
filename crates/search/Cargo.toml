@@ -1,5 +1,5 @@
 [package]
-name = "gh-docs-search"
+name = "docs-mcp-search"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -8,9 +8,9 @@ publish.workspace = true
 
 [dependencies]
 base64.workspace = true
-gh-docs-core = { path = "../core" }
-gh-docs-git = { path = "../git" }
-gh-docs-storage = { path = "../storage" }
+docs-mcp-core = { path = "../core" }
+docs-mcp-git = { path = "../git" }
+docs-mcp-storage = { path = "../storage" }
 grep-matcher.workspace = true
 grep-regex.workspace = true
 ring.workspace = true

@@ -13,13 +13,13 @@ use std::{
 };
 
 use base64::{Engine, engine::general_purpose::STANDARD};
-use gh_docs_core::{
+use docs_mcp_core::{
     Result,
     git::{ObjectType, Oid, RefName, RepositoryId},
     git_manifest::{self, Check, Manifest},
 };
-use gh_docs_git::store::{self, Fence, LockScope};
-use gh_docs_storage::publication::{release_generation, writer_fence};
+use docs_mcp_git::store::{self, Fence, LockScope};
+use docs_mcp_storage::publication::{release_generation, writer_fence};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio_postgres::Client;

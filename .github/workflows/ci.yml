@@ -48,7 +48,7 @@ jobs:
           persist-credentials: false
       - name: Lint GitHub Actions workflows
         run: |
-          work=$(mktemp -d /tmp/ghdocs-actionlint.XXXXXXXX)
+          work=$(mktemp -d /tmp/docsmcp-actionlint.XXXXXXXX)
           trap 'rm -rf -- "$work"' EXIT
           curl --fail --silent --show-error --location --retry 3 \
             https://github.com/kjanat/actionlint/releases/download/v1.17.1/actionlint_1.17.1_linux_amd64.tar.gz \
@@ -82,7 +82,7 @@ jobs:
           persist-credentials: false
       - name: Create a disposable work directory
         run: |
-          work=$(mktemp -d /tmp/ghdocs-ci.XXXXXXXX)
+          work=$(mktemp -d /tmp/docsmcp-ci.XXXXXXXX)
           mkdir "$work/logs"
           echo "CI_WORK_DIR=$work" >> "$GITHUB_ENV"
       - name: Prepare the native Compose host
@@ -145,10 +145,10 @@ jobs:
       - name: Remove disposable client and fixture image tags
         if: ${{ always() && env.CI_WORK_DIR != '' }}
         run: |
-          if [[ ${CI_CLIENT_DIR:-} == /tmp/gh-docs-client.* ]]; then
+          if [[ ${CI_CLIENT_DIR:-} == /tmp/docs-mcp-client.* ]]; then
             rm -rf -- "$CI_CLIENT_DIR"
           fi
-          docker --context default image ls --filter "reference=gh-docs-*:$FIXTURE_TAG" \
+          docker --context default image ls --filter "reference=docs-mcp-*:$FIXTURE_TAG" \
             --format '{{.Repository}}:{{.Tag}}' | xargs -r docker --context default image rm
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         if: ${{ failure() && env.CI_WORK_DIR != '' }}

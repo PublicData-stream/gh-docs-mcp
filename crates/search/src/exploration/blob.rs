@@ -24,7 +24,7 @@ pub(super) fn page(
         end: size as u64,
     });
     let range =
-        gh_docs_core::git::checked_range(start, end, size).map_err(|_| Error::InvalidArgument)?;
+        docs_mcp_core::git::checked_range(start, end, size).map_err(|_| Error::InvalidArgument)?;
     let first =
         usize::try_from(pagination.offset()?.unwrap_or(start)).map_err(|_| Error::CursorInvalid)?;
     if first < range.start || first > range.end {

@@ -30,7 +30,7 @@ PROFILES = {
     "medium-sha256": ("sha256", 512, 256),
 }
 MIB = 1024 * 1024
-SEED = "gh-docs-phase7-v1"
+SEED = "docs-mcp-phase7-v1"
 RATE = 48
 WARM_SECONDS = 20
 
@@ -214,7 +214,7 @@ def compare_batch(out, stack, label, repo, fmt, oid):
     # Hold the shared fence and use the production confined reader for both
     # paths. The isolated fixture has already been authorized through MCP.
     command = r"""
-    reader() { gh-docs-git-reader canonical "$1" "$2" batch; }
+    reader() { docs-mcp-git-reader canonical "$1" "$2" batch; }
     if [ "$4" = batched ]; then
       for _ in $(seq 1 8); do printf 'contents %s\0' "$3"; done | reader "$1" "$2"
     else
@@ -255,7 +255,7 @@ def sync_parallel(out, stack, upstream, config, endpoint):
         def fetch(repo):
             start = time.monotonic()
             result = phase2.fetch(stack, repo, endpoint,
-                                  env=("-e", f"GH_DOCS_SYNC_CONCURRENCY={concurrency}"))
+                                  env=("-e", f"DOCS_MCP_SYNC_CONCURRENCY={concurrency}"))
             assert result["outcome"] == "verified", result
             return time.monotonic() - start
 
@@ -281,7 +281,7 @@ def sync_parallel(out, stack, upstream, config, endpoint):
 
 def profile(out, tag, label, samples, cold_samples):
     fmt, commits, files = PROFILES[label]
-    with phase2.stack(tag, publication=True, serve_target="mcp-serve",
+    with phase2.stack(tag, publication=True, serve_target="serve",
                       fixture_setup=lambda root: generate(root, fmt, commits, files)) as (
             stack, upstream, config, endpoint):
         wire = phase5.Wire(stack)

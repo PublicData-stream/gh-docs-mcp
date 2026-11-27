@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-`gh-docs-mcp` is a Rust workspace for private, read-only Git repository
+`docs-mcp` is a Rust workspace for private, read-only Git repository
 exploration over MCP. Phase 0 serves a synthetic fixture and qualifies the
 deployment with Docker Compose. Git data belongs in native bare object stores.
 PostgreSQL is the control plane. Keep the MCP revision pinned and scope

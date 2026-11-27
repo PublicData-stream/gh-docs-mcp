@@ -53,7 +53,7 @@ interface. [Exploration approval and notice format](exploration.md#output-approv
 docker compose --profile operator run --rm --no-deps migrate --migrate
 docker compose --profile operator run --rm --no-deps \
   -v "$approval_file:/approval.json:ro" migrate --register-source --approval-file /approval.json
-docker compose exec -T sync gh-docs-sync --reconcile --repository "$repository_uuid"
+docker compose exec -T sync docs-mcp-sync --reconcile --repository "$repository_uuid"
 docker compose --profile operator run --rm --no-deps \
   migrate --revoke-source --source "$source_uuid"
 ~~~
@@ -70,11 +70,11 @@ firewall when an approved host changes addresses.
 ## Verification and recovery
 
 Sync holds the repository coordinator through worker teardown and takes one
-global slot. Set `GH_DOCS_SYNC_CONCURRENCY` consistently in the single Compose
+global slot. Set `DOCS_MCP_SYNC_CONCURRENCY` consistently in the single Compose
 sync service. The default is 2 and the range is 1–4. Provision host headroom
 and set `SYNC_MEMORY_LIMIT=8g` before raising concurrency to four. Each slot
 has a 1 GiB tmpfs and a separate process group. The storage quota defaults to
-8 GiB. Lower `GH_DOCS_SYNC_QUOTA_BYTES` only with capacity for the candidate
+8 GiB. Lower `DOCS_MCP_SYNC_QUOTA_BYTES` only with capacity for the candidate
 reservation of each configured slot. Admission checks free space and inodes.
 
 Git uses a fixed executable, scoped scratch access, a syscall allowlist, and
@@ -123,9 +123,9 @@ the Phase 2 suites. [Deployment prerequisites](deployment-prerequisites.md) ·
 ~~~sh
 sudo -n python3 -B scripts/phase2/integration.py --image-tag "$tag"
 python3 -B scripts/phase2/minikube.py \
-  --sync-image "gh-docs-phase2-sync:$tag" \
-  --upstream-image "gh-docs-phase2-upstream:$tag" \
-  --postgres-image "gh-docs-mcp-postgres:$tag" \
+  --sync-image "docs-mcp-phase2-sync:$tag" \
+  --upstream-image "docs-mcp-phase2-upstream:$tag" \
+  --postgres-image "docs-mcp-postgres:$tag" \
   --bootstrap-cache "$bootstrap_cache"
 ~~~
 

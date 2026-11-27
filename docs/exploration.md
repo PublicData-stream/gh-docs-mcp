@@ -1,8 +1,8 @@
 # Private Git exploration
 
-The Phase 4 Rust service in `gh_docs_search::exploration` provides a typed
+The Phase 4 Rust service in `docs_mcp_search::exploration` provides a typed
 request interface over approved SHA-1 and SHA-256 generations. Compose
-qualifies it through the feature-gated `gh-docs-phase4-fixture` JSON driver
+qualifies it through the feature-gated `docs-mcp-phase4-fixture` JSON driver
 with serve credentials and the read-only published store. The normal HTTP
 endpoint uses the same engine. See [MCP search and history](mcp.md).
 
@@ -167,13 +167,13 @@ the additional Phase 4 fixture with the same tag.
 
 ~~~sh
 docker --context default buildx build --network host --platform linux/amd64 \
-  --load --target phase4-serve -t "gh-docs-phase4-serve:$tag" .
+  --load --target phase4-serve -t "docs-mcp-phase4-serve:$tag" .
 sudo -n python3 -B scripts/phase4/integration.py --image-tag "$tag"
 python3 -B scripts/phase4/minikube.py \
-  --serve-image "gh-docs-phase4-serve:$tag" \
-  --sync-image "gh-docs-phase3-sync:$tag" \
-  --upstream-image "gh-docs-phase2-upstream:$tag" \
-  --postgres-image "gh-docs-mcp-postgres:$tag" \
+  --serve-image "docs-mcp-phase4-serve:$tag" \
+  --sync-image "docs-mcp-phase3-sync:$tag" \
+  --upstream-image "docs-mcp-phase2-upstream:$tag" \
+  --postgres-image "docs-mcp-postgres:$tag" \
   --bootstrap-cache "$bootstrap_cache"
 ~~~
 

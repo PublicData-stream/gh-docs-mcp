@@ -20,7 +20,7 @@ from backup import sha256
 from release_version import CANDIDATE_VERSION, ROOT, cargo_digests, parse_version, stage_source
 
 
-SOURCE = "https://github.com/PublicData-stream/gh-docs-mcp"
+SOURCE = "https://github.com/PublicData-stream/docs-mcp"
 DOCKER = ("docker", "--context", "default")
 APP_ROLES = ("serve", "sync", "feed")
 ROLES = (*APP_ROLES, "postgres")
@@ -137,7 +137,7 @@ def merge(layouts, destination, *, annotations=None):
 
 @contextmanager
 def builder():
-    name = f"ghdocs8-{os.getpid()}"
+    name = f"docsmcp8-{os.getpid()}"
     run(*DOCKER, "buildx", "create", "--name", name, "--driver", "docker-container",
         "--driver-opt", f"image={BUILDKIT},network=host", "--buildkitd-flags",
         "--allow-insecure-entitlement network.host")
@@ -159,7 +159,7 @@ def build(destination, revision, seed, repeat, version=CANDIDATE_VERSION):
     revision = output("git", "-C", ROOT, "rev-parse", "--verify", "--end-of-options", f"{revision}^{{commit}}")
     epoch = output("git", "-C", ROOT, "show", "-s", "--format=%ct", revision)
     destination.mkdir(mode=0o700)
-    with tempfile.TemporaryDirectory(prefix="ghdocs8-source-", dir="/tmp") as directory:
+    with tempfile.TemporaryDirectory(prefix="docsmcp8-source-", dir="/tmp") as directory:
         work = Path(directory)
         source = stage_source(revision, version, work)
         inputs = cargo_digests(source)
@@ -189,7 +189,7 @@ def export(builder_name, source, work, destination, role, arch, epoch, labels, s
         *DOCKER, "buildx", "build", "--builder", builder_name, "--platform", f"linux/{arch}",
         "--network", "host", "--allow", "network.host", "--target", role,
         "--build-arg", f"SOURCE_DATE_EPOCH={epoch}",
-        "--tag", f"gh-docs-mcp-{role}:{labels['org.opencontainers.image.version']}",
+        "--tag", f"docs-mcp-{role}:{labels['org.opencontainers.image.version']}",
         "--provenance", "mode=min", "--attest", f"type=sbom,generator={SBOM}",
         "--output", f"type=oci,dest={archive},rewrite-timestamp=true",
     ]
@@ -238,7 +238,7 @@ def assemble(amd64, arm64, destination, *, revision=None, version=None):
 
 @contextmanager
 def local_registry():
-    name = f"ghdocs8-registry-{os.getpid()}"
+    name = f"docsmcp8-registry-{os.getpid()}"
     run(*DOCKER, "run", "--detach", "--name", name, "--publish", "127.0.0.1::5000",
         "--tmpfs", "/var/lib/registry:size=2g", "--log-opt", "max-size=1m", REGISTRY)
     try:
@@ -262,25 +262,25 @@ def load_native(bundle, tag):
     refs = {}
     aliases = []
     for role in ROLES:
-        alias = f"gh-docs-mcp-{role}:{tag}"
+        alias = f"docs-mcp-{role}:{tag}"
         existing = subprocess.run([*DOCKER, "image", "inspect", alias],
                                   stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, check=False)
         if existing.returncode == 0:
             raise ValueError(f"qualification image tag already exists: {alias}")
-    with local_registry() as registry, tempfile.TemporaryDirectory(dir="/tmp", prefix="ghdocs8-oci-") as directory:
+    with local_registry() as registry, tempfile.TemporaryDirectory(dir="/tmp", prefix="docsmcp8-oci-") as directory:
         try:
             for role in ROLES:
                 source = bundle / role
                 digest = inspect(source, arch)["digest"]
                 layout = Path(directory) / role
                 merge([source], layout)
-                repo = f"{registry}/gh-docs-mcp-{role}"
+                repo = f"{registry}/docs-mcp-{role}"
                 run("skopeo", "copy", "--all", "--preserve-digests", "--dest-tls-verify=false",
                     f"oci:{layout}:release", f"docker://{repo}:{tag}")
                 ref = f"{repo}@{digest}"
                 refs[role] = ref
                 run(*DOCKER, "pull", "--platform", f"linux/{arch}", ref)
-                alias = f"gh-docs-mcp-{role}:{tag}"
+                alias = f"docs-mcp-{role}:{tag}"
                 run(*DOCKER, "tag", ref, alias)
                 aliases.append(alias)
             yield refs

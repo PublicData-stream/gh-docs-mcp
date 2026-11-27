@@ -14,7 +14,7 @@ import tempfile
 from release_version import check_workspace, parse_version, require, stage_source
 
 
-REPOSITORY = "PublicData-stream/gh-docs-mcp"
+REPOSITORY = "PublicData-stream/docs-mcp"
 CI_PATH = ".github/workflows/ci.yml"
 CI_JOB = "rust"
 SHA = re.compile(r"[0-9a-f]{40}")
@@ -107,7 +107,7 @@ def preflight(version):
     tag_object = git("rev-parse", "--verify", ref)
     revision = git("rev-parse", "--verify", f"{ref}^{{commit}}")
     verify_source(version, revision, tag_object)
-    with tempfile.TemporaryDirectory(prefix="ghdocs8-preflight-", dir="/tmp") as directory:
+    with tempfile.TemporaryDirectory(prefix="docsmcp8-preflight-", dir="/tmp") as directory:
         stage_source(revision, version, Path(directory))
     print(f"Release preflight passed for {version} at {revision}")
 

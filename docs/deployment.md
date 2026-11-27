@@ -8,10 +8,10 @@ amd64. See the [release gate](release-readiness.md) for qualification status.
 ## Provision and start
 
 1. Use four matching image digests from the release receipt. Set
-   `GH_DOCS_SERVE_IMAGE`, `GH_DOCS_SYNC_IMAGE`, `GH_DOCS_FEED_IMAGE`, and
-   `GH_DOCS_POSTGRES_IMAGE` to the full registry references with
+   `DOCS_MCP_SERVE_IMAGE`, `DOCS_MCP_SYNC_IMAGE`, `DOCS_MCP_FEED_IMAGE`, and
+   `DOCS_MCP_POSTGRES_IMAGE` to the full registry references with
    `@sha256:<index digest>`. Set
-   `GH_DOCS_MCP_AUTHORITY` to the TLS name and port used by clients.
+   `DOCS_MCP_AUTHORITY` to the TLS name and port used by clients.
    The overlay trusts only the dedicated OxiBelt ingress IP. Serve verifies
    the normalized hostname, effective TLS port and scheme from that peer
    before reconstructing the configured Host for MCP validation.

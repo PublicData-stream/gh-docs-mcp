@@ -8,12 +8,12 @@ object store and PostgreSQL are authoritative for publication and reads.
 
 Apply the catalog migration during a maintenance window with publication
 writers stopped. Use the existing role UID, mount, and TLS configuration.
-Set `GH_DOCS_CONTROL_ENABLED=1` to enable the control plane in Compose. With
+Set `DOCS_MCP_CONTROL_ENABLED=1` to enable the control plane in Compose. With
 control disabled the roles provide their previous services and manual sync
 commands. Enabling control with an empty roster starts outbox delivery and
 schedules no repositories.
 
-Set `GH_DOCS_SYNC_ROSTER_FILE` to an absolute path in sync's read-only inputs.
+Set `DOCS_MCP_SYNC_ROSTER_FILE` to an absolute path in sync's read-only inputs.
 The file is a JSON array of up to 128 canonical repository UUIDs. Register
 each source using the existing approval workflow. Every currently approved
 HTTPS repository on this roster can publish automatically. Remove a
@@ -21,7 +21,7 @@ repository and restart sync to stop scheduling it. The durable pause survives
 a restart or removal and later re-enrollment.
 
 Start the optional `feed` profile to reduce update latency. Set
-`GH_DOCS_FEED_ROSTER_FILE` to a JSON array of the reviewed source approval
+`DOCS_MCP_FEED_ROSTER_FILE` to a JSON array of the reviewed source approval
 documents for the subset to observe. Mount the file read-only on feed.
 Feed uses bounded Git Smart HTTPS ref discovery, preserves native SHA-1 or
 SHA-256 identity, and sends only the observation digest and identifiers.
@@ -45,8 +45,8 @@ and keys, migrate and start the selected roles.
 ~~~sh
 docker compose --profile feed stop feed sync
 docker compose --profile operator run --rm --no-deps migrate --migrate
-GH_DOCS_CONTROL_ENABLED=1 docker compose up -d serve sync
-GH_DOCS_CONTROL_ENABLED=1 docker compose --profile feed up -d feed
+DOCS_MCP_CONTROL_ENABLED=1 docker compose up -d serve sync
+DOCS_MCP_CONTROL_ENABLED=1 docker compose --profile feed up -d feed
 ~~~
 
 Stop both feed and sync before a maintenance operation that requires
@@ -69,10 +69,10 @@ for 24 hours and caps receipts at 1,024 per repository.
 Use the following commands inside the sync service.
 
 ~~~sh
-gh-docs-sync --schedule-status --repository "$repository_uuid"
-gh-docs-sync --pause --repository "$repository_uuid"
-gh-docs-sync --rollback --repository "$repository_uuid" --generation "$retained" --expect-sequence "$current"
-gh-docs-sync --resume --repository "$repository_uuid" --expect-sequence "$after_rollback"
+docs-mcp-sync --schedule-status --repository "$repository_uuid"
+docs-mcp-sync --pause --repository "$repository_uuid"
+docs-mcp-sync --rollback --repository "$repository_uuid" --generation "$retained" --expect-sequence "$current"
+docs-mcp-sync --resume --repository "$repository_uuid" --expect-sequence "$after_rollback"
 ~~~
 
 An operator pause prevents new claims and automatic promotion. A fetch that
@@ -208,11 +208,11 @@ export CARGO_TARGET_DIR=/tmp/rust/target
 scripts/phase0/check-rust.sh
 sudo -n python3 -B scripts/phase6/integration.py --image-tag "$tag"
 python3 -B scripts/phase6/minikube.py \
-  --serve-image "gh-docs-mcp-serve:$tag" \
-  --sync-image "gh-docs-phase6-sync:$tag" \
-  --feed-image "gh-docs-phase6-feed:$tag" \
-  --upstream-image "gh-docs-phase2-upstream:$tag" \
-  --postgres-image "gh-docs-mcp-postgres:$tag" \
+  --serve-image "docs-mcp-serve:$tag" \
+  --sync-image "docs-mcp-phase6-sync:$tag" \
+  --feed-image "docs-mcp-phase6-feed:$tag" \
+  --upstream-image "docs-mcp-phase2-upstream:$tag" \
+  --postgres-image "docs-mcp-postgres:$tag" \
   --bootstrap-cache "$bootstrap_cache"
 ~~~
 

@@ -2,7 +2,7 @@ use std::{collections::BTreeSet, net::IpAddr, path::Path};
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{DateTime, Utc};
-use gh_docs_core::{
+use docs_mcp_core::{
     Result,
     exploration::ExplorationApproval,
     git::{ObjectFormat, RefName, RepositoryId},

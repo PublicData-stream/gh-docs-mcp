@@ -60,38 +60,38 @@ RUN --network=none \
     find apps crates migrations -type f -exec touch {} + \
     && cargo build --workspace --bins --release --frozen \
     && mkdir /out \
-    && cp /tmp/rust/target/release/gh-docs-serve /tmp/rust/target/release/gh-docs-sync \
-          /tmp/rust/target/release/gh-docs-feed /tmp/rust/target/release/gh-docs-git-reader \
-          /tmp/rust/target/release/gh-docs-git-sync \
-          /tmp/rust/target/release/gh-docs-search-worker /out/
+    && cp /tmp/rust/target/release/docs-mcp-serve /tmp/rust/target/release/docs-mcp-sync \
+          /tmp/rust/target/release/docs-mcp-feed /tmp/rust/target/release/docs-mcp-git-reader \
+          /tmp/rust/target/release/docs-mcp-git-sync \
+          /tmp/rust/target/release/docs-mcp-search-worker /out/
 
 FROM docker.io/library/alpine:3.24@sha256:f59abe656b692d901e184be3445e084786602108599d2a51d229c0f5a48c71bf AS runtime
-COPY LICENSE docs/RFC-MCP-DOCKER-LICENSE /usr/share/licenses/gh-docs-mcp/
+COPY LICENSE docs/RFC-MCP-DOCKER-LICENSE /usr/share/licenses/docs-mcp/
 RUN --network=none grep -A 1 -x 'P:ca-certificates-bundle' /lib/apk/db/installed \
     | grep -qx 'V:20261020-r0' \
     && test -s /etc/ssl/certs/ca-certificates.crt
 
 FROM runtime AS serve
-COPY --from=app-build /out/gh-docs-serve /out/gh-docs-git-reader /out/gh-docs-search-worker /usr/local/bin/
+COPY --from=app-build /out/docs-mcp-serve /out/docs-mcp-git-reader /out/docs-mcp-search-worker /usr/local/bin/
 COPY --from=git-build /out/git /usr/local/bin/
 COPY --from=git-build /out/COPYING /usr/share/licenses/git/
 COPY --from=ripgrep-build /out/rg /usr/local/bin/
 COPY --from=ripgrep-build /out/LICENSE-MIT /out/UNLICENSE /usr/share/licenses/ripgrep/
 USER 10001:10001
-ENTRYPOINT ["/usr/local/bin/gh-docs-serve"]
+ENTRYPOINT ["/usr/local/bin/docs-mcp-serve"]
 
 FROM runtime AS sync
-COPY --from=app-build /out/gh-docs-sync /out/gh-docs-git-sync /usr/local/bin/
-COPY --from=app-build /out/gh-docs-git-sync /usr/local/libexec/gh-docs-git/git-remote-ghdocs
+COPY --from=app-build /out/docs-mcp-sync /out/docs-mcp-git-sync /usr/local/bin/
+COPY --from=app-build /out/docs-mcp-git-sync /usr/local/libexec/docs-mcp-git/git-remote-docsmcp
 COPY --from=git-build /out/git /usr/local/bin/
 COPY --from=git-build /out/COPYING /usr/share/licenses/git/
 USER 10002:10002
-ENTRYPOINT ["/usr/local/bin/gh-docs-sync"]
+ENTRYPOINT ["/usr/local/bin/docs-mcp-sync"]
 
 FROM runtime AS feed
-COPY --from=app-build /out/gh-docs-feed /usr/local/bin/
+COPY --from=app-build /out/docs-mcp-feed /usr/local/bin/
 USER 10003:10003
-ENTRYPOINT ["/usr/local/bin/gh-docs-feed"]
+ENTRYPOINT ["/usr/local/bin/docs-mcp-feed"]
 
 FROM docker.io/library/postgres:19.0-alpine3.24@sha256:cac45fb483caee3668946088a1c0532db89d5285c28dbfeac889b4068296e06f AS postgres
 ARG TARGETARCH
@@ -107,33 +107,33 @@ RUN set -eu; \
     printf '%s  %s\n' "$digest" "$package" | sha256sum -c -; \
     apk --no-logfile add --no-network --no-cache "$package"; \
     rm "$package" /usr/local/bin/gosu
-COPY --chmod=755 deploy/postgres-entrypoint.sh /usr/local/bin/gh-docs-postgres-entrypoint
+COPY --chmod=755 deploy/postgres-entrypoint.sh /usr/local/bin/docs-mcp-postgres-entrypoint
 USER 70:70
-ENTRYPOINT ["/usr/local/bin/gh-docs-postgres-entrypoint"]
+ENTRYPOINT ["/usr/local/bin/docs-mcp-postgres-entrypoint"]
 CMD ["postgres"]
 
 FROM app-build AS phase1-fixture-build
 RUN --network=none \
     --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/tmp/rust/target,sharing=locked \
-    cargo build --frozen --release -p gh-docs-mcp --features phase1-fixtures --bin gh-docs-phase1-fixture \
-    && cp /tmp/rust/target/release/gh-docs-phase1-fixture /out/
+    cargo build --frozen --release -p docs-mcp --features phase1-fixtures --bin docs-mcp-phase1-fixture \
+    && cp /tmp/rust/target/release/docs-mcp-phase1-fixture /out/
 
 FROM serve AS phase1-serve
-COPY --from=phase1-fixture-build /out/gh-docs-phase1-fixture /usr/local/bin/
+COPY --from=phase1-fixture-build /out/docs-mcp-phase1-fixture /usr/local/bin/
 
 FROM sync AS phase1-sync
-COPY --from=phase1-fixture-build /out/gh-docs-phase1-fixture /out/gh-docs-git-reader /usr/local/bin/
+COPY --from=phase1-fixture-build /out/docs-mcp-phase1-fixture /out/docs-mcp-git-reader /usr/local/bin/
 
 FROM app-build AS phase2-fixture-build
 RUN --network=none \
     --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/tmp/rust/target,sharing=locked \
-    cargo build --frozen --release -p gh-docs-mcp --features phase2-fixtures --bin gh-docs-phase2-fixture \
-    && cp /tmp/rust/target/release/gh-docs-phase2-fixture /out/
+    cargo build --frozen --release -p docs-mcp --features phase2-fixtures --bin docs-mcp-phase2-fixture \
+    && cp /tmp/rust/target/release/docs-mcp-phase2-fixture /out/
 
 FROM sync AS phase2-sync
-COPY --from=phase2-fixture-build /out/gh-docs-phase2-fixture /usr/local/bin/
+COPY --from=phase2-fixture-build /out/docs-mcp-phase2-fixture /usr/local/bin/
 
 FROM runtime AS phase2-upstream
 RUN apk add --no-cache python3=3.14.10-r2 git=2.54.1-r0 git-daemon=2.54.1-r0
@@ -145,38 +145,38 @@ FROM app-build AS phase3-fixture-build
 RUN --network=none \
     --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/tmp/rust/target,sharing=locked \
-    cargo build --frozen --release -p gh-docs-mcp --features phase2-fixtures --bin gh-docs-phase3-fixture \
-    && cp /tmp/rust/target/release/gh-docs-phase3-fixture /out/
+    cargo build --frozen --release -p docs-mcp --features phase2-fixtures --bin docs-mcp-phase3-fixture \
+    && cp /tmp/rust/target/release/docs-mcp-phase3-fixture /out/
 
 FROM serve AS phase3-serve
-COPY --from=phase3-fixture-build /out/gh-docs-phase3-fixture /usr/local/bin/
+COPY --from=phase3-fixture-build /out/docs-mcp-phase3-fixture /usr/local/bin/
 
 FROM phase2-sync AS phase3-sync
-COPY --from=phase3-fixture-build /out/gh-docs-phase3-fixture /usr/local/bin/
+COPY --from=phase3-fixture-build /out/docs-mcp-phase3-fixture /usr/local/bin/
 
 FROM app-build AS phase4-fixture-build
 RUN --network=none \
     --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/tmp/rust/target,sharing=locked \
-    cargo build --frozen --release -p gh-docs-mcp --features phase4-fixtures --bin gh-docs-phase4-fixture \
-    && cp /tmp/rust/target/release/gh-docs-phase4-fixture /out/
+    cargo build --frozen --release -p docs-mcp --features phase4-fixtures --bin docs-mcp-phase4-fixture \
+    && cp /tmp/rust/target/release/docs-mcp-phase4-fixture /out/
 
 FROM phase3-serve AS phase4-serve
-COPY --from=phase4-fixture-build /out/gh-docs-phase4-fixture /usr/local/bin/
+COPY --from=phase4-fixture-build /out/docs-mcp-phase4-fixture /usr/local/bin/
 
 FROM app-build AS phase6-fixture-build
 RUN --network=none \
     --mount=type=cache,target=/usr/local/cargo/registry,sharing=locked \
     --mount=type=cache,target=/tmp/rust/target,sharing=locked \
-    cargo build --frozen --release -p gh-docs-mcp --features phase6-fixtures --bin gh-docs-sync --bin gh-docs-feed --bin gh-docs-serve \
-    && cp /tmp/rust/target/release/gh-docs-sync /tmp/rust/target/release/gh-docs-feed \
-          /tmp/rust/target/release/gh-docs-serve /out/
+    cargo build --frozen --release -p docs-mcp --features phase6-fixtures --bin docs-mcp-sync --bin docs-mcp-feed --bin docs-mcp-serve \
+    && cp /tmp/rust/target/release/docs-mcp-sync /tmp/rust/target/release/docs-mcp-feed \
+          /tmp/rust/target/release/docs-mcp-serve /out/
 
 FROM phase2-sync AS phase6-sync
-COPY --from=phase6-fixture-build /out/gh-docs-sync /usr/local/bin/
+COPY --from=phase6-fixture-build /out/docs-mcp-sync /usr/local/bin/
 
 FROM feed AS phase6-feed
-COPY --from=phase6-fixture-build /out/gh-docs-feed /usr/local/bin/
+COPY --from=phase6-fixture-build /out/docs-mcp-feed /usr/local/bin/
 
 FROM serve AS phase6-serve
-COPY --from=phase6-fixture-build /out/gh-docs-serve /usr/local/bin/
+COPY --from=phase6-fixture-build /out/docs-mcp-serve /usr/local/bin/

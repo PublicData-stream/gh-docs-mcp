@@ -7,7 +7,7 @@ use std::{
     time::Duration,
 };
 
-use gh_docs_core::Result;
+use docs_mcp_core::Result;
 use reqwest::{Certificate, Client, StatusCode, header};
 use tokio::net::UnixStream;
 use tokio_postgres::Client as Database;

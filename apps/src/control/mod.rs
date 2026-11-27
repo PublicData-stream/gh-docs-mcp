@@ -4,7 +4,7 @@
 mod auth;
 mod wire;
 
-use gh_docs_core::git::RepositoryId;
+use docs_mcp_core::git::RepositoryId;
 use serde::{Deserialize, Serialize};
 use std::{
     io,
@@ -24,6 +24,7 @@ pub enum Link {
 }
 
 impl Link {
+    // These role identifiers are part of the signed v1 control envelope.
     fn roles(self) -> (&'static str, &'static str) {
         match self {
             Self::FeedSync => ("gh-docs-feed", "gh-docs-sync"),
@@ -33,8 +34,8 @@ impl Link {
 
     fn key_prefix(self) -> &'static str {
         match self {
-            Self::FeedSync => "GH_DOCS_FEED_SYNC",
-            Self::SyncServe => "GH_DOCS_SYNC_SERVE",
+            Self::FeedSync => "DOCS_MCP_FEED_SYNC",
+            Self::SyncServe => "DOCS_MCP_SYNC_SERVE",
         }
     }
 }
@@ -188,7 +189,7 @@ fn invalid(message: &'static str) -> io::Error {
 }
 
 pub fn enabled() -> Result<bool> {
-    match std::env::var("GH_DOCS_CONTROL_ENABLED") {
+    match std::env::var("DOCS_MCP_CONTROL_ENABLED") {
         Ok(value) if value == "1" => Ok(true),
         Ok(value) if value == "0" => Ok(false),
         Err(std::env::VarError::NotPresent) => Ok(false),
@@ -219,13 +220,13 @@ pub async fn shutdown() -> io::Result<()> {
 }
 
 // A separate fixture image can route synthetic HTTPS to its test server.
-pub fn fixture() -> Result<Option<gh_docs_sync::Fixture>> {
+pub fn fixture() -> Result<Option<docs_mcp_sync::Fixture>> {
     #[cfg(feature = "phase6-fixtures")]
-    if let Ok(endpoint) = std::env::var("GH_DOCS_PHASE6_UPSTREAM") {
-        return Ok(Some(gh_docs_sync::Fixture {
+    if let Ok(endpoint) = std::env::var("DOCS_MCP_PHASE6_UPSTREAM") {
+        return Ok(Some(docs_mcp_sync::Fixture {
             address: endpoint.parse()?,
-            ca: Some(gh_docs_core::required("GH_DOCS_PHASE6_UPSTREAM_CA")?.into()),
-            fault: std::env::var("GH_DOCS_PHASE6_FETCH_FAULT").ok(),
+            ca: Some(docs_mcp_core::required("DOCS_MCP_PHASE6_UPSTREAM_CA")?.into()),
+            fault: std::env::var("DOCS_MCP_PHASE6_FETCH_FAULT").ok(),
         }));
     }
     Ok(None)
@@ -234,7 +235,7 @@ pub fn fixture() -> Result<Option<gh_docs_sync::Fixture>> {
 /// Select a process interruption in a disposable fixture image.
 pub fn fixture_fault() -> Option<String> {
     #[cfg(feature = "phase6-fixtures")]
-    if let Some(path) = std::env::var_os("GH_DOCS_PHASE6_FAULT_FILE")
+    if let Some(path) = std::env::var_os("DOCS_MCP_PHASE6_FAULT_FILE")
         && let Ok(point) = std::fs::read_to_string(path)
     {
         return Some(point.trim().to_owned());

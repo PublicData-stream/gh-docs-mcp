@@ -12,7 +12,7 @@ pub(crate) const RECORD_FIELDS: usize = 5;
 
 pub fn run(force_failure: bool) -> io::Result<()> {
     let mut output = io::stdout().lock();
-    if gh_docs_git::sandbox::confine_framed_search(force_failure).is_err() {
+    if docs_mcp_git::sandbox::confine_framed_search(force_failure).is_err() {
         return output.write_all(b"-").and_then(|()| output.flush());
     }
     output.write_all(b"+")?;

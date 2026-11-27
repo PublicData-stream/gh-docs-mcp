@@ -43,7 +43,7 @@ To rebuild, pass the same revision and full version to
    key.
 3. Refresh `origin/main` and run preflight with an authenticated `gh` that
    can read the repository, Actions runs, and checks. For example, run
-   `python3 -B scripts/phase8/release_source.py preflight 1.0.2`. It checks
+   `python3 -B scripts/phase8/release_source.py preflight 2.0.0`. It checks
    the exact signed tag, canonical `main` CI, and version stamping.
 4. Publish a GitHub Release for that existing tag. Mark beta releases as
    prereleases. Publishing the release authorizes the workflow to write the
@@ -60,10 +60,15 @@ attestations with an empty credential file. A stable release also sets
 
 | Package in `ghcr.io/publicdata-stream` | Compose variable |
 | --- | --- |
-| `gh-docs-mcp-serve` | `GH_DOCS_SERVE_IMAGE` |
-| `gh-docs-mcp-sync` | `GH_DOCS_SYNC_IMAGE` |
-| `gh-docs-mcp-feed` | `GH_DOCS_FEED_IMAGE` |
-| `gh-docs-mcp-postgres` | `GH_DOCS_POSTGRES_IMAGE` |
+| `docs-mcp-serve` | `DOCS_MCP_SERVE_IMAGE` |
+| `docs-mcp-sync` | `DOCS_MCP_SYNC_IMAGE` |
+| `docs-mcp-feed` | `DOCS_MCP_FEED_IMAGE` |
+| `docs-mcp-postgres` | `DOCS_MCP_POSTGRES_IMAGE` |
+
+The first planned release under these package names is `2.0.0`. Existing
+release tags and the `gh-docs-mcp-*` package references remain part of their
+original release lineage. Retain the previous digest-pinned references for
+the [deployment cutover](deployment.md#upgrade-and-rollback).
 
 Use all four digest-pinned references from the workflow summary or the
 `ghcr-release-digests.json` artifact together. The receipt also records the
@@ -100,7 +105,7 @@ version. A conflicting digest for the same version requires investigation.
 ~~~sh
 actionlint
 python3 -B -m unittest discover -s scripts/phase8 -p test_release.py
-GH_DOCS_TEST_LOOPBACK=1 python3 -B -m unittest discover -s scripts/phase8 -p test_release.py
+DOCS_MCP_TEST_LOOPBACK=1 python3 -B -m unittest discover -s scripts/phase8 -p test_release.py
 ~~~
 
 The loopback test requires Docker and Skopeo and uses synthetic OCI layouts.

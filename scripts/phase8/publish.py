@@ -103,7 +103,7 @@ def release_entries(receipt, revision, version, namespace, *, published=False):
     images = {}
     for role in ROLES:
         entry = receipt["images"][role]
-        repository = f"{namespace}/gh-docs-mcp-{role}"
+        repository = f"{namespace}/docs-mcp-{role}"
         require(DIGEST.fullmatch(entry["index"]) and set(entry["platforms"]) == set(ARCHES)
                 and all(DIGEST.fullmatch(value) for value in entry["platforms"].values())
                 and (not published or entry["image"] == repository), f"invalid release receipt for {role}")
@@ -242,7 +242,7 @@ def main():
         return
     entries = release_entries(json.loads(args.receipt.read_bytes()), args.revision, args.version,
                               namespace, published=True)
-    with tempfile.TemporaryDirectory(dir="/tmp", prefix="ghdocs-release-pull-") as temporary:
+    with tempfile.TemporaryDirectory(dir="/tmp", prefix="docsmcp-release-pull-") as temporary:
         directory = Path(temporary)
         authfile = directory / "auth.json"
         authfile.write_text("{}\n")

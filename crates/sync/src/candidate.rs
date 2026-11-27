@@ -13,7 +13,7 @@ use std::{
 };
 
 use base64::{Engine, engine::general_purpose::STANDARD};
-use gh_docs_core::{
+use docs_mcp_core::{
     Result,
     git::{ObjectFormat, ObjectType, Oid, RefName},
 };
@@ -64,7 +64,10 @@ pub fn init_odb(path: &Path, format: ObjectFormat) -> Result<()> {
     fs::create_dir(path)?;
     fs::create_dir_all(path.join("objects/pack"))?;
     fs::create_dir_all(path.join("refs/gh-docs/fetch"))?;
-    fs::write(path.join("config"), gh_docs_git::store::bare_config(format))?;
+    fs::write(
+        path.join("config"),
+        docs_mcp_git::store::bare_config(format),
+    )?;
     fs::write(path.join("HEAD"), b"ref: refs/heads/main\n")?;
     Ok(())
 }
@@ -150,7 +153,7 @@ pub async fn acquire(
     let ls = args(&[
         "ls-remote",
         "--symref",
-        "ghdocs::approved",
+        "docsmcp::approved",
         "HEAD",
         "refs/heads/*",
         "refs/tags/*",
@@ -172,7 +175,7 @@ pub async fn acquire(
             "--no-recurse-submodules",
             "--no-auto-maintenance",
             "--no-write-fetch-head",
-            "ghdocs::approved",
+            "docsmcp::approved",
         ]);
         let mut wants = BTreeSet::new();
         let mut estimated_request = 512;
@@ -267,7 +270,7 @@ pub async fn seed(
     format: ObjectFormat,
 ) -> Result<()> {
     let manifest = read_manifest(&baseline.directory.join("manifest.json"))?;
-    if gh_docs_core::git_manifest::observation_digest(&manifest) != baseline.observed.as_slice() {
+    if docs_mcp_core::git_manifest::observation_digest(&manifest) != baseline.observed.as_slice() {
         return Err("baseline manifest digest mismatch".into());
     }
     let decoded: Value = serde_json::from_slice(&manifest)?;

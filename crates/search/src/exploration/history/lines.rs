@@ -1,6 +1,6 @@
 use std::ops::Range;
 
-use gh_docs_git::reader::Batch;
+use docs_mcp_git::reader::Batch;
 
 use super::super::Error;
 

@@ -1,6 +1,6 @@
 //! Migration and typed access to the offline candidate catalog.
 
-use gh_docs_core::{
+use docs_mcp_core::{
     Result,
     git::{ObjectFormat, ObjectType, Oid, RefName, RepositoryId},
 };

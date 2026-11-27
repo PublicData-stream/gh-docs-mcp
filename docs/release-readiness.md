@@ -16,7 +16,7 @@ Run on the native architecture and retain logs in a fresh directory under `/tmp`
 ```sh
 set -o pipefail
 export CARGO_TARGET_DIR=/tmp/rust/target TMPDIR=/tmp
-evidence=$(mktemp -d /tmp/gh-docs-phase8.XXXXXXXX)
+evidence=$(mktemp -d /tmp/docs-mcp-phase8.XXXXXXXX)
 client=$(scripts/phase0/prepare-client.sh)
 cargo fetch --locked
 scripts/phase0/check-rust.sh
@@ -34,7 +34,7 @@ python3 -B scripts/phase8/audit.py "$evidence/oci" "$evidence/audit" --tag phase
 On hosts with constrained registry access, seed the locked crates from a
 private directory under `/tmp` containing Cargo's `index` and `cache`.
 Pass that directory as `--seed` to `images.py` and as
-`GH_DOCS_RELEASE_SEED` to `fixtures.sh`. Cargo still validates the lockfiles.
+`DOCS_MCP_RELEASE_SEED` to `fixtures.sh`. Cargo still validates the lockfiles.
 
 For Minikube, run `scripts/phase7/minikube.py` with the prepared serve,
 Phase 6 sync/feed, Phase 2 upstream, and Compose PostgreSQL image.

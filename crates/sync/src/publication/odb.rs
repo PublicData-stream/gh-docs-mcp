@@ -15,7 +15,7 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use gh_docs_core::{
+use docs_mcp_core::{
     Result,
     git::{ObjectFormat, RepositoryId},
 };
@@ -38,7 +38,7 @@ pub struct Repository {
 
 impl Repository {
     pub fn open(id: RepositoryId, format: ObjectFormat) -> Result<Self> {
-        let root = gh_docs_git::store::canonical_root()?;
+        let root = docs_mcp_git::store::canonical_root()?;
         let private = root.join(".publication");
         directory(&private, 0o700)?;
         let workspace = private.join(id.to_string());
@@ -123,7 +123,7 @@ impl Repository {
     }
 
     pub fn validate_layout(&self) -> Result<()> {
-        gh_docs_git::store::validate_canonical(self.id, self.format)?;
+        docs_mcp_git::store::validate_canonical(self.id, self.format)?;
         exact_names(&self.odb, &["HEAD", "config", "objects", "refs"])?;
         exact_names(&self.odb.join("objects"), &["pack"])?;
         exact_names(&self.odb.join("refs"), &["gh-docs"])?;
@@ -138,7 +138,7 @@ pub fn init_odb(path: &Path, format: ObjectFormat) -> Result<()> {
     fs::create_dir_all(path.join("refs/gh-docs/retention"))?;
     write_file(
         &path.join("config"),
-        gh_docs_git::store::bare_config(format).as_bytes(),
+        docs_mcp_git::store::bare_config(format).as_bytes(),
         0o644,
     )?;
     write_file(&path.join("HEAD"), b"ref: refs/heads/main\n", 0o644)?;

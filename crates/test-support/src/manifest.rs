@@ -1,9 +1,9 @@
 //! Fixture encoder for the proposed version 1 Git generation manifest.
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use gh_docs_core::git::{ObjectFormat, RefName, RepositoryId};
-use gh_docs_core::git_manifest::{self, Check};
-use gh_docs_storage::catalog::RefSnapshot;
+use docs_mcp_core::git::{ObjectFormat, RefName, RepositoryId};
+use docs_mcp_core::git_manifest::{self, Check};
+use docs_mcp_storage::catalog::RefSnapshot;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
@@ -65,7 +65,7 @@ impl Observation<'_> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gh_docs_core::git::{ObjectType, Oid};
+    use docs_mcp_core::git::{ObjectType, Oid};
 
     #[test]
     fn golden_manifest_distinguishes_content_and_observation() {

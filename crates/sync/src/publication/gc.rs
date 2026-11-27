@@ -7,7 +7,7 @@ use std::{
 };
 
 use chrono::{Duration, SecondsFormat, Utc};
-use gh_docs_core::Result;
+use docs_mcp_core::Result;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -205,7 +205,7 @@ impl Context<'_> {
     async fn protected_fences(
         &self,
         generations: &[Generation],
-    ) -> Result<Vec<(i64, gh_docs_git::store::Fence)>> {
+    ) -> Result<Vec<(i64, docs_mcp_git::store::Fence)>> {
         let mut fences = Vec::with_capacity(generations.len());
         for generation in generations {
             fences.push((generation.id, self.generation_fence(generation.id).await?));
@@ -213,7 +213,7 @@ impl Context<'_> {
         Ok(fences)
     }
 
-    async fn release_fences(&self, fences: Vec<(i64, gh_docs_git::store::Fence)>) -> Result<()> {
+    async fn release_fences(&self, fences: Vec<(i64, docs_mcp_git::store::Fence)>) -> Result<()> {
         for (id, guard) in fences.into_iter().rev() {
             self.unlock_generation(id).await?;
             drop(guard);

@@ -53,36 +53,36 @@ def phase6(root, args):
         spec["env"].extend({"name": key, "value": value} for key, value in settings.items())
 
     ready = lambda port: ["wget", "-qO", "/dev/null", f"http://127.0.0.1:{port}/healthz"]
-    serve.update(name="serve", command=["gh-docs-serve"], restartPolicy="Always",
+    serve.update(name="serve", command=["docs-mcp-serve"], restartPolicy="Always",
                  startupProbe={"exec": {"command": ready(8081)}, "periodSeconds": 1, "failureThreshold": 35})
-    add_env(serve, GH_DOCS_CONTROL_ENABLED="1", GH_DOCS_SERVE_NOTIFY_BIND="127.0.0.1:8784",
-            GH_DOCS_SYNC_SERVE_KEY_ID="v1", GH_DOCS_SYNC_SERVE_KEY_FILE="/run/secrets/sync-serve.key")
+    add_env(serve, DOCS_MCP_CONTROL_ENABLED="1", DOCS_MCP_SERVE_NOTIFY_BIND="127.0.0.1:8784",
+            DOCS_MCP_SYNC_SERVE_KEY_ID="v1", DOCS_MCP_SYNC_SERVE_KEY_FILE="/run/secrets/sync-serve.key")
     # Compose supplies an init process. Keep the daemon below PID 1 here as
     # well so the existing Git parent-death check can detect an orphan.
-    supervise = """gh-docs-sync & child=$!
+    supervise = """docs-mcp-sync & child=$!
 trap 'kill -TERM "$child"; wait "$child" || true' TERM INT
 wait "$child"
 """
     sync.update(name="sync", command=["/bin/sh", "-ec", supervise], restartPolicy="Always",
                 startupProbe={"exec": {"command": ready(8082)}, "periodSeconds": 1, "failureThreshold": 35})
     sync["volumeMounts"].append(mount("configuration", "/fixtures", True))
-    add_env(sync, HEALTH_BIND="127.0.0.1:8082", GH_DOCS_CONTROL_ENABLED="1",
-            GH_DOCS_SYNC_CONTROL_BIND="127.0.0.1:8783", GH_DOCS_SYNC_SERVE_ADDR="127.0.0.1:8784",
-            GH_DOCS_FEED_SYNC_KEY_ID="v1", GH_DOCS_FEED_SYNC_KEY_FILE="/run/secrets/feed-sync.key",
-            GH_DOCS_SYNC_SERVE_KEY_ID="v1", GH_DOCS_SYNC_SERVE_KEY_FILE="/run/secrets/sync-serve.key",
-            GH_DOCS_SYNC_ROSTER_FILE="/fixtures/sync-roster.json",
-            GH_DOCS_PHASE6_UPSTREAM="127.0.0.1:8443", GH_DOCS_PHASE6_UPSTREAM_CA="/run/secrets/upstream-ca.crt")
-    feed = container("feed", args.feed_image, 10003, ["gh-docs-feed"],
+    add_env(sync, HEALTH_BIND="127.0.0.1:8082", DOCS_MCP_CONTROL_ENABLED="1",
+            DOCS_MCP_SYNC_CONTROL_BIND="127.0.0.1:8783", DOCS_MCP_SYNC_SERVE_ADDR="127.0.0.1:8784",
+            DOCS_MCP_FEED_SYNC_KEY_ID="v1", DOCS_MCP_FEED_SYNC_KEY_FILE="/run/secrets/feed-sync.key",
+            DOCS_MCP_SYNC_SERVE_KEY_ID="v1", DOCS_MCP_SYNC_SERVE_KEY_FILE="/run/secrets/sync-serve.key",
+            DOCS_MCP_SYNC_ROSTER_FILE="/fixtures/sync-roster.json",
+            DOCS_MCP_PHASE6_UPSTREAM="127.0.0.1:8443", DOCS_MCP_PHASE6_UPSTREAM_CA="/run/secrets/upstream-ca.crt")
+    feed = container("feed", args.feed_image, 10003, ["docs-mcp-feed"],
         [mount("feed-auth", "/run/secrets", True), mount("configuration", "/fixtures", True)],
-        env={"HEALTH_BIND": "127.0.0.1:8083", "GH_DOCS_CONTROL_ENABLED": "1",
-             "GH_DOCS_FEED_SYNC_ADDR": "127.0.0.1:8783", "GH_DOCS_FEED_SYNC_KEY_ID": "v1",
-             "GH_DOCS_FEED_SYNC_KEY_FILE": "/run/secrets/feed-sync.key", "GH_DOCS_FEED_ROSTER_FILE": "/fixtures/feed-roster.json",
-             "GH_DOCS_PHASE6_UPSTREAM": "127.0.0.1:8443", "GH_DOCS_PHASE6_UPSTREAM_CA": "/run/secrets/upstream-ca.crt"},
+        env={"HEALTH_BIND": "127.0.0.1:8083", "DOCS_MCP_CONTROL_ENABLED": "1",
+             "DOCS_MCP_FEED_SYNC_ADDR": "127.0.0.1:8783", "DOCS_MCP_FEED_SYNC_KEY_ID": "v1",
+             "DOCS_MCP_FEED_SYNC_KEY_FILE": "/run/secrets/feed-sync.key", "DOCS_MCP_FEED_ROSTER_FILE": "/fixtures/feed-roster.json",
+             "DOCS_MCP_PHASE6_UPSTREAM": "127.0.0.1:8443", "DOCS_MCP_PHASE6_UPSTREAM_CA": "/run/secrets/upstream-ca.crt"},
         sidecar=ready(8083))
     pod["initContainers"].extend([seed, serve, sync, feed])
     context = {"repository_id": repo, "generation_id": "0", "object_format": "sha1", "commit_oid": oracle["head"]}
     commands = [
-        f"""timeout 100 sh -ec 'until gh-docs-sync --status --repository {repo} | grep -q "delivered.*true"; do sleep 1; done'""",
+        f"""timeout 100 sh -ec 'until docs-mcp-sync --status --repository {repo} | grep -q "delivered.*true"; do sleep 1; done'""",
         *wire_commands("sha1", context, PHRASE),
         "echo 'Phase 6 feed hint, scheduled publication, authenticated acknowledgment and MCP read passed'",
     ]

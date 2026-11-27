@@ -1,4 +1,4 @@
 fn main() -> std::io::Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
-    gh_docs_git::reader::worker(&args)
+    docs_mcp_git::reader::worker(&args)
 }

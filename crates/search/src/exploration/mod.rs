@@ -19,9 +19,9 @@ use std::{
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
-use gh_docs_core::git::{ByteString, ObjectFormat, ObjectType, Oid, RefName, RepositoryId};
-use gh_docs_git::reader::{Batch, Reachability, Reader, SandboxUnavailable, TreeMode};
-use gh_docs_storage::{
+use docs_mcp_core::git::{ByteString, ObjectFormat, ObjectType, Oid, RefName, RepositoryId};
+use docs_mcp_git::reader::{Batch, Reachability, Reader, SandboxUnavailable, TreeMode};
+use docs_mcp_storage::{
     catalog::RefSnapshot,
     connect,
     exploration::{self as catalog, Metadata},
@@ -585,7 +585,7 @@ impl TreeQuery {
         })
     }
 
-    fn root(root: Option<gh_docs_core::git::BytePath>, depth: u8) -> Result<Vec<u8>, Error> {
+    fn root(root: Option<docs_mcp_core::git::BytePath>, depth: u8) -> Result<Vec<u8>, Error> {
         if !(1..=MAX_DEPTH).contains(&depth) {
             return Err(Error::InvalidArgument);
         }

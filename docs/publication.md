@@ -158,15 +158,15 @@ Compose and Minikube probes. Use the same local PostgreSQL image for both.
 ~~~sh
 for role in serve sync; do
   docker --context default buildx build --network host --platform linux/amd64 \
-    --load --target "phase3-$role" -t "gh-docs-phase3-$role:$tag" .
+    --load --target "phase3-$role" -t "docs-mcp-phase3-$role:$tag" .
 done
 
 sudo -n python3 -B scripts/phase3/integration.py --image-tag "$tag"
 python3 -B scripts/phase3/minikube.py \
-  --serve-image "gh-docs-phase3-serve:$tag" \
-  --sync-image "gh-docs-phase3-sync:$tag" \
-  --upstream-image "gh-docs-phase2-upstream:$tag" \
-  --postgres-image "gh-docs-mcp-postgres:$tag" \
+  --serve-image "docs-mcp-phase3-serve:$tag" \
+  --sync-image "docs-mcp-phase3-sync:$tag" \
+  --upstream-image "docs-mcp-phase2-upstream:$tag" \
+  --postgres-image "docs-mcp-postgres:$tag" \
   --bootstrap-cache "$bootstrap_cache"
 ~~~
 

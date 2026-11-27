@@ -3,7 +3,7 @@ set -eu
 
 export CARGO_TARGET_DIR=/tmp/rust/target
 export TMPDIR
-TMPDIR=$(mktemp -d /tmp/gh-docs-rust.XXXXXXXX)
+TMPDIR=$(mktemp -d /tmp/docs-mcp-rust.XXXXXXXX)
 trap 'rmdir "$TMPDIR"' EXIT
 
 cargo fmt --all -- --check

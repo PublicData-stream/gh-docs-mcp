@@ -43,23 +43,30 @@ spec.loader.exec_module(capacity)
 
 @contextmanager
 def release_stack(tag, refs, *, previous=False):
-    name = f"ghdocs8-{secrets.token_hex(5)}"
+    name = f"docsmcp8-{secrets.token_hex(5)}"
     table = name.replace("-", "_")
     root = Path(tempfile.mkdtemp(prefix=f"{name}-", dir="/tmp"))
     stack = phase0.Stack(root, name, tag)
-    stack.context.update({f"GH_DOCS_{role.upper()}_IMAGE": ref for role, ref in refs.items()})
-    stack.context.update(EXPLORATION_CURSOR_KEY_ID="restore-v2", GH_DOCS_CONTROL_ENABLED="1")
+    stack.context.update({f"DOCS_MCP_{role.upper()}_IMAGE": ref for role, ref in refs.items()})
+    stack.context.update(EXPLORATION_CURSOR_KEY_ID="restore-v2", DOCS_MCP_CONTROL_ENABLED="1")
     overlay = RELEASE
     if previous:
         # Reapply the pre-upgrade proxy profile with its matching runtime.
         overlay = root / "previous.json"
         roles = {role: {"image": ref} for role, ref in refs.items()}
+        config = json.loads(stack.compose("config", "--format", "json").stdout)
+        for role in images.APP_ROLES:
+            roles[role]["environment"] = {
+                "GH_DOCS_" + name.removeprefix("DOCS_MCP_"): value
+                for name, value in config["services"][role]["environment"].items()
+                if name.startswith("DOCS_MCP_")
+            }
         roles["migrate"] = {"image": refs["sync"]}
-        roles["postgres"] = {"image": "${GH_DOCS_POSTGRES_IMAGE:?}"}
+        roles["postgres"] = {"image": "${DOCS_MCP_POSTGRES_IMAGE:?}"}
         overlay.write_text(json.dumps({"services": roles}))
     else:
         stack.mcp_host = "localhost"
-        stack.context["GH_DOCS_MCP_AUTHORITY"] = f"localhost:{stack.env['PROXY_PORT']}"
+        stack.context["DOCS_MCP_AUTHORITY"] = f"localhost:{stack.env['PROXY_PORT']}"
         certificate = root / "proxy"
         os.chown(certificate, 10001, 10001)
         phase0.fixtures.cert(certificate, "localhost", "DNS:localhost", 10001)
@@ -305,7 +312,7 @@ def load(wire, records):
 def rehearse(args, refs, work, version):
     bundle = work / "backup"
     with phase2.stack(args.fixture_tag, publication=True, fixture_setup=phase5.prepare,
-                      serve_target="mcp-serve") as (source, upstream, config, endpoint):
+                      serve_target="serve") as (source, upstream, config, endpoint):
         records = choose_seed(source, upstream, config, endpoint)
         source.compose("stop", "proxy", "feed", "serve", "sync", "upstream")
         source_name = source.compose_command[source.compose_command.index("-p") + 1]
@@ -382,13 +389,13 @@ def rehearse(args, refs, work, version):
             backup.restore(project, project.store(), bundle, digest)
             open_stack(target)
             wire = phase5.Wire(target)
-            wire.validate_registry()
+            wire.validate_registry(legacy=True)
             check_readback(wire, records, rotate=True)
         finally:
             target.compose("stop", "proxy", "feed", "serve", "sync")
         # Reopen the populated PostgreSQL 19 data directory with the new runtime.
         target.compose("stop", "postgres")
-        target.context["GH_DOCS_POSTGRES_IMAGE"] = refs["postgres"]
+        target.context["DOCS_MCP_POSTGRES_IMAGE"] = refs["postgres"]
         target.compose("up", "--no-build", "--pull", "never", "--force-recreate", "--wait",
                        "--wait-timeout", "130", "postgres", timeout=145)
         open_stack(target)
@@ -412,7 +419,7 @@ def main():
         parser.error("run under sudo with assertions and evidence under /tmp")
     version = json.loads((args.bundle / "receipt.json").read_bytes())["version"]
     signal.signal(signal.SIGTERM, phase0.terminate)
-    with (tempfile.TemporaryDirectory(dir="/tmp", prefix="ghdocs8-rehearsal-") as directory,
+    with (tempfile.TemporaryDirectory(dir="/tmp", prefix="docsmcp8-rehearsal-") as directory,
           images.load_native(args.bundle, args.runtime_tag) as refs):
         result = rehearse(args, refs, Path(directory), version)
     with args.evidence.open("x") as evidence:

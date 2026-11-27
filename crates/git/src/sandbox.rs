@@ -537,7 +537,7 @@ fn confine_sync_scope(scratch: &str, broker: bool, write: bool) -> io::Result<()
     if broker {
         add_landlock_rule(
             &ruleset,
-            "/usr/local/libexec/gh-docs-git/git-remote-ghdocs",
+            "/usr/local/libexec/docs-mcp-git/git-remote-docsmcp",
             EXECUTE | READ_FILE,
         )?;
     }

@@ -9,7 +9,7 @@ The qualification proxy binds to loopback.
 The seven [exploration tools](exploration.md) retain their argument shapes.
 Reuse the exact four-field context from `git.resolve`. The
 [runtime schema snapshot](../apps/schemas/tools.json) also includes the five
-tools below. `gh-docs-serve --tool-schemas` exports the registry without
+tools below. `docs-mcp-serve --tool-schemas` exports the registry without
 connecting to PostgreSQL.
 
 Successful calls and tool errors carry structured JSON and equivalent JSON
@@ -117,9 +117,9 @@ sudo -n python3 -B scripts/phase5/integration.py --image-tag "$tag" \
   --node "$(command -v node)" --client-dir "$client_dir"
 
 python3 -B scripts/phase5/minikube.py \
-  --serve-image "gh-docs-mcp-serve:$tag" \
-  --sync-image "gh-docs-phase3-sync:$tag" \
-  --upstream-image "gh-docs-phase2-upstream:$tag" \
-  --postgres-image "gh-docs-mcp-postgres:$tag" \
+  --serve-image "docs-mcp-serve:$tag" \
+  --sync-image "docs-mcp-phase3-sync:$tag" \
+  --upstream-image "docs-mcp-phase2-upstream:$tag" \
+  --postgres-image "docs-mcp-postgres:$tag" \
   --bootstrap-cache "$bootstrap_cache"
 ~~~

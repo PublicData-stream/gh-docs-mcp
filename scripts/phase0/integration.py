@@ -55,7 +55,7 @@ class Stack:
             override = root / "phase0-mcp.yml"
             override.write_text("services:\n  serve:\n    command: [--phase0-mcp-fixture]\n")
             self.compose_command.extend(["-f", str(override)])
-        self.context = {**os.environ, **self.env, "GH_DOCS_IMAGE_TAG": image_tag}
+        self.context = {**os.environ, **self.env, "DOCS_MCP_IMAGE_TAG": image_tag}
         self.ids = {}
 
     def compose(self, *args, **options):
@@ -100,7 +100,7 @@ class Stack:
 
 
 def db_tests(stack):
-    binaries = {"serve": "gh-docs-serve", "sync": "gh-docs-sync"}
+    binaries = {"serve": "docs-mcp-serve", "sync": "docs-mcp-sync"}
     for role, binary in binaries.items():
         identity = stack.exec(role, binary, "--db-identity").stdout.strip().split()
         assert identity[:4] == [f"gh_docs_{role}", "UTF8", "i", "und"], identity
@@ -111,15 +111,15 @@ def db_tests(stack):
         for option in ("--db-ddl", "--db-temp", "--db-private"):
             denied = stack.exec(role, binary, option, expected=None)
             assert denied.returncode != 0 and "SQLSTATE 42501" in denied.stdout, denied.stdout
-    stack.exec("sync", "gh-docs-sync", "--db-dml")
-    denied = stack.exec("serve", "gh-docs-serve", "--db-dml", expected=None)
+    stack.exec("sync", "docs-mcp-sync", "--db-dml")
+    denied = stack.exec("serve", "docs-mcp-serve", "--db-dml", expected=None)
     assert denied.returncode != 0 and "SQLSTATE 42501" in denied.stdout, denied.stdout
-    stack.exec("serve", "gh-docs-serve", "--db-lock")
+    stack.exec("serve", "docs-mcp-serve", "--db-lock")
     for setting, value, reason in (
         ("DB_CA_FILE", "/run/secrets/wrong-ca.crt", "UnknownIssuer"),
         ("DB_HOST", "wrong-db.phase0.test", "NotValidForName"),
     ):
-        result = stack.compose("exec", "-T", "-e", f"{setting}={value}", "serve", "gh-docs-serve",
+        result = stack.compose("exec", "-T", "-e", f"{setting}={value}", "serve", "docs-mcp-serve",
                                "--db-select", expected=None)
         assert result.returncode != 0 and reason in result.stdout, result.stdout
 
@@ -303,11 +303,11 @@ def worker_tests(stack):
     assert "SHA-1: SHA1_DC" in git_options and "SHA-256: SHA256_BLK" in git_options, git_options
     print("A04 " + " / ".join(versions) + " / SHA1_DC and SHA256_BLK", flush=True)
     for profile in ("git", "search"):
-        result = stack.exec("serve", "gh-docs-serve", "--phase0-worker", profile)
+        result = stack.exec("serve", "docs-mcp-serve", "--phase0-worker", profile)
         assert "inherited descriptors and denial controls passed" in result.stdout, result.stdout
         assert "phase-zero fixture" in result.stdout, result.stdout
         print(f"A04 {profile}: {result.stdout.splitlines()[0]}", flush=True)
-        failed = stack.exec("serve", "gh-docs-serve", "--phase0-worker", profile, "--fail-setup", expected=None)
+        failed = stack.exec("serve", "docs-mcp-serve", "--phase0-worker", profile, "--fail-setup", expected=None)
         assert failed.returncode != 0 and "sandbox_unavailable" in failed.stdout, failed.stdout
         assert "phase-zero fixture" not in failed.stdout, failed.stdout
     git = stack.exec("serve", "env", "-i", "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null",
@@ -356,7 +356,7 @@ def main():
     print(run([*DOCKER, "compose", "version"]).stdout.strip(), flush=True)
     node_version = run([args.node, "--version"]).stdout.strip()
     assert node_version == "v26.13.1", node_version
-    project = "ghdocs0-" + secrets.token_hex(5)
+    project = "docsmcp0-" + secrets.token_hex(5)
     image_tag = args.image_tag if args.skip_build else project
     table = project.replace("-", "_")
     root = Path(tempfile.mkdtemp(prefix=f"{project}-", dir="/tmp"))
@@ -365,7 +365,7 @@ def main():
         stack = Stack(root, project, image_tag, mcp_fixture=True)
         if not args.skip_build:
             for role in ("serve", "sync", "feed", "postgres"):
-                image = f"gh-docs-mcp-{role}:{image_tag}"
+                image = f"docs-mcp-{role}:{image_tag}"
                 build = [
                     *DOCKER, "buildx", "build", "--network", "host", "--platform", "linux/amd64",
                     "--load", "--target", role, "-t", image, ".",

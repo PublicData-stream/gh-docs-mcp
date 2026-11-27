@@ -13,12 +13,12 @@ use std::{collections::BTreeMap, ffi::OsString, fs, path::Path, time::Duration};
 
 use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{SecondsFormat, Utc};
-use gh_docs_core::{
+use docs_mcp_core::{
     Result,
     git::{ObjectFormat, Oid, RepositoryId},
 };
-use gh_docs_git::store::{self, LockMode, LockScope};
-use gh_docs_storage::publication::{filesystem_fence, writer_advisory_fence};
+use docs_mcp_git::store::{self, LockMode, LockScope};
+use docs_mcp_storage::publication::{filesystem_fence, writer_advisory_fence};
 use serde_json::{Value, json};
 use tokio_postgres::Client;
 use uuid::Uuid;
@@ -389,9 +389,9 @@ async fn prepare_and_seal(
         STANDARD.encode(verified.default.bytes()),
         verified.snapshot
     ]);
-    let manifest = gh_docs_core::git_manifest::encode(
+    let manifest = docs_mcp_core::git_manifest::encode(
         content,
-        gh_docs_core::git_manifest::Check::HttpsGit,
+        docs_mcp_core::git_manifest::Check::HttpsGit,
         &observed,
     );
     let logical = manifest.logical;

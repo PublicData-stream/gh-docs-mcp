@@ -18,7 +18,7 @@ phase3 = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(phase3)
 phase2 = phase3.phase2
 
-DRIVER = "gh-docs-phase4-fixture"
+DRIVER = "docs-mcp-phase4-fixture"
 SCHEMA = ROOT / "scripts/phase4/request.schema.json"
 
 

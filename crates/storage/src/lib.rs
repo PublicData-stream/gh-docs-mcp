@@ -2,7 +2,7 @@
 
 use std::{fs, time::Duration};
 
-use gh_docs_core::{Result, required};
+use docs_mcp_core::{Result, required};
 use rustls::pki_types::{CertificateDer, pem::PemObject};
 use tokio::task::JoinHandle;
 use tokio_postgres::{Client, config::SslMode};

@@ -47,8 +47,8 @@ class CargoVersionTests(unittest.TestCase):
             ("Cargo.toml", 'version = "0.0.0"', 'version = "1.0.2"', "workspace.package.version"),
             ("apps/Cargo.toml", "version.workspace = true", 'version = "0.0.0"', "apps/Cargo.toml"),
             ("crates/test-support/Cargo.toml", 'version = "0.0.0"', "version.workspace = true", "test-support"),
-            ("Cargo.lock", 'name = "gh-docs-core"\nversion = "0.0.0"',
-             'name = "gh-docs-core"\nversion = "1.0.2"', "Cargo.lock.*gh-docs-core"),
+            ("Cargo.lock", 'name = "docs-mcp-core"\nversion = "0.0.0"',
+             'name = "docs-mcp-core"\nversion = "1.0.2"', "Cargo.lock.*docs-mcp-core"),
         ):
             with self.subTest(path=path), self.assertRaisesRegex(ValueError, expected):
                 cargo_version.stamped_inputs(
@@ -199,7 +199,7 @@ def seal(assembled):
 
 class BundleTests(unittest.TestCase):
     def test_assembly_requires_the_qualified_postgres_manifest(self):
-        with tempfile.TemporaryDirectory(dir="/tmp", prefix="ghdocs-release-test-") as temporary:
+        with tempfile.TemporaryDirectory(dir="/tmp", prefix="docsmcp-release-test-") as temporary:
             work = Path(temporary) / "input"
             bundle(work, REVISION, VERSION)
             native = work / "arm64"
@@ -216,7 +216,7 @@ class BundleTests(unittest.TestCase):
                 images.assemble(work / "amd64", native, work / "wrong-postgres")
 
     def test_assembly_rejects_different_stamped_inputs(self):
-        with tempfile.TemporaryDirectory(dir="/tmp", prefix="ghdocs-release-test-") as temporary:
+        with tempfile.TemporaryDirectory(dir="/tmp", prefix="docsmcp-release-test-") as temporary:
             work = Path(temporary) / "input"
             bundle(work, REVISION, VERSION)
             path = work / "arm64" / "receipt.json"
@@ -227,7 +227,7 @@ class BundleTests(unittest.TestCase):
                 images.assemble(work / "amd64", work / "arm64", work / "new-bundle")
 
     def test_corrupt_bundle_blocks_all_registry_access(self):
-        with tempfile.TemporaryDirectory(dir="/tmp", prefix="ghdocs-release-test-") as temporary:
+        with tempfile.TemporaryDirectory(dir="/tmp", prefix="docsmcp-release-test-") as temporary:
             work = Path(temporary)
             assembled = bundle(work / "valid", REVISION, VERSION)
             registry = Mock(namespace=publish.NAMESPACE)
@@ -313,7 +313,7 @@ class ProxyInventoryTests(unittest.TestCase):
                               "subject": [{"digest": {"sha256": subject}}], "predicate": self.inventory},
             }}], stdout)
 
-        with (tempfile.TemporaryDirectory(dir="/tmp", prefix="ghdocs-proxy-inventory-") as temporary,
+        with (tempfile.TemporaryDirectory(dir="/tmp", prefix="docsmcp-proxy-inventory-") as temporary,
               patch.object(audit, "architecture", return_value="amd64"),
               patch.object(audit.subprocess, "check_output", return_value=json.dumps(manifest)),
               patch.object(audit, "run", side_effect=verified)):
@@ -326,10 +326,10 @@ class ProxyInventoryTests(unittest.TestCase):
                     audit.proxy_sbom(ref, out, self.lock)
 
 
-@unittest.skipUnless(os.environ.get("GH_DOCS_TEST_LOOPBACK") == "1", "requires Docker and Skopeo")
+@unittest.skipUnless(os.environ.get("DOCS_MCP_TEST_LOOPBACK") == "1", "requires Docker and Skopeo")
 class RegistryTests(unittest.TestCase):
     def test_publication_recovery_and_monotonic_latest(self):
-        with (tempfile.TemporaryDirectory(dir="/tmp", prefix="ghdocs-release-test-") as temporary,
+        with (tempfile.TemporaryDirectory(dir="/tmp", prefix="docsmcp-release-test-") as temporary,
               images.local_registry() as host):
             work = Path(temporary)
             auth = work / "auth.json"
@@ -347,7 +347,7 @@ class RegistryTests(unittest.TestCase):
                 copy(source, destination)
 
             def first_package(ref, *, missing=False, bootstrap=False):
-                if bootstrap and ref == f"{host}/gh-docs-mcp-serve:{VERSION}":
+                if bootstrap and ref == f"{host}/docs-mcp-serve:{VERSION}":
                     return "bootstrap"
                 return manifest(ref, missing=missing)
 
@@ -356,10 +356,10 @@ class RegistryTests(unittest.TestCase):
                 with self.assertRaises(subprocess.CalledProcessError):
                     publish.publish(registry, assembled, receipt, REVISION, VERSION)
                 serve = json.loads((assembled / "release.json").read_bytes())["images"]["serve"]["index"]
-                self.assertEqual(copied.call_args_list[0].args[1], f"docker://{host}/gh-docs-mcp-serve@{serve}")
+                self.assertEqual(copied.call_args_list[0].args[1], f"docker://{host}/docs-mcp-serve@{serve}")
             self.assertFalse(receipt.exists())
-            self.assertIsNotNone(registry.manifest(f"{host}/gh-docs-mcp-serve:{VERSION}"))
-            self.assertIsNone(registry.manifest(f"{host}/gh-docs-mcp-sync:{VERSION}", missing=True))
+            self.assertIsNotNone(registry.manifest(f"{host}/docs-mcp-serve:{VERSION}"))
+            self.assertIsNone(registry.manifest(f"{host}/docs-mcp-sync:{VERSION}", missing=True))
             publish.publish(registry, assembled, receipt, REVISION, VERSION)
             stable = json.loads(receipt.read_bytes())["images"]
             self.assertEqual(set(stable), {"serve", "sync", "feed", "postgres"})

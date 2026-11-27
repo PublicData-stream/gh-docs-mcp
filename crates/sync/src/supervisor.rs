@@ -7,7 +7,7 @@ use std::{
     process::ExitStatus,
 };
 
-use gh_docs_core::Result;
+use docs_mcp_core::Result;
 use tokio::{io::AsyncReadExt, net::UnixStream, process::Command};
 
 pub const CHILD: &str = "--phase2-supervised";

@@ -6,8 +6,8 @@ use std::{
     sync::Arc,
 };
 
-use gh_docs_core::{Result, required};
-use gh_docs_search::exploration::{CursorKey, Error, Explorer, Request};
+use docs_mcp_core::{Result, required};
+use docs_mcp_search::exploration::{CursorKey, Error, Explorer, Request};
 use serde_json::{Value, json, value::RawValue};
 use tokio::task::JoinSet;
 

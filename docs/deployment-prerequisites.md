@@ -15,7 +15,7 @@ docker --context default pull docker.io/library/nginx:1.30.0-alpine@sha256:0272e
 
 set -o pipefail
 sudo -n python3 -B scripts/phase0/integration.py --node "$(command -v node)" --client-dir "$client_dir" \
-  2>&1 | tee /tmp/gh-docs-phase0-integration.log
+  2>&1 | tee /tmp/docs-mcp-phase0-integration.log
 ```
 
 The harness builds Serve, Sync, Feed, and PostgreSQL. Build-time downloads use host networking. Git, ripgrep, and workspace compilation run with networking disabled. Application runtime networks are created for one disposable Compose project, with temporary data, certificates, and secrets under `/tmp`. The harness verifies that every selected image is present before it creates project resources. It installs nftables rules before starting services and stops the project before deleting its rules. Use the harness to start the Phase 0 stack so the egress policy is in effect.

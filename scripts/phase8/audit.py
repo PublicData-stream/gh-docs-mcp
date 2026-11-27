@@ -173,8 +173,8 @@ def exact_images(bundle, out, tag, work, proxy_lock):
             if role in APP_ROLES:
                 run(*DOCKER, "run", "--rm", "--network", "none", "--read-only", "--cap-drop", "ALL",
                     "--security-opt", "no-new-privileges", "--entrypoint", "/bin/sh", ref, "-ec",
-                    "test -f /usr/share/licenses/gh-docs-mcp/LICENSE; "
-                    "test -f /usr/share/licenses/gh-docs-mcp/RFC-MCP-DOCKER-LICENSE; "
+                    "test -f /usr/share/licenses/docs-mcp/LICENSE; "
+                    "test -f /usr/share/licenses/docs-mcp/RFC-MCP-DOCKER-LICENSE; "
                     "for tool in cargo rustc make gcc python3 node pnpm; do ! command -v \"$tool\" || exit 1; done; "
                     "test -z \"$(find /usr/local/bin -name '*fixture*')\"; "
                     "test ! -e /run/secrets && test ! -e /src")
@@ -189,7 +189,7 @@ def exact_images(bundle, out, tag, work, proxy_lock):
                     raise ValueError("PostgreSQL image did not reject root startup")
             saved = work / "image.tar"
             # Use an image tag so the archive contains an explicit Docker reference.
-            name = f"gh-docs-mcp-{role}:{tag}" if role in refs else ref
+            name = f"docs-mcp-{role}:{tag}" if role in refs else ref
             run(*DOCKER, "image", "save", "-o", saved, name)
             for file, format_name in (("sbom", "cyclonedx"), ("vulnerabilities", "json")):
                 options = ["--scanners", "vuln"] if file == "vulnerabilities" else []
@@ -230,7 +230,7 @@ def main():
         parser.error("audit output must be under /tmp")
     os.umask(0o077)
     out.mkdir()
-    with tempfile.TemporaryDirectory(prefix="ghdocs8-audit-", dir="/tmp") as directory:
+    with tempfile.TemporaryDirectory(prefix="docsmcp8-audit-", dir="/tmp") as directory:
         work = Path(directory)
         receipt = json.loads((args.bundle / "receipt.json").read_bytes())
         workspace = stage_source(receipt["revision"], receipt["version"], work)

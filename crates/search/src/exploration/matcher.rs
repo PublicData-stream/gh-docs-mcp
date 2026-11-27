@@ -7,7 +7,7 @@ pub(super) enum Matcher {
 
 impl Matcher {
     pub fn compile(pattern: Pattern) -> Result<Self, Error> {
-        let decode = |value: gh_docs_core::git::ByteString| {
+        let decode = |value: docs_mcp_core::git::ByteString| {
             let bytes = value.decode(256).map_err(|_| Error::InvalidArgument)?;
             if bytes.is_empty() || bytes.contains(&0) {
                 return Err(Error::InvalidArgument);
@@ -91,7 +91,7 @@ fn component_matches(pattern: &[u8], bytes: &[u8]) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use gh_docs_core::git::ByteString;
+    use docs_mcp_core::git::ByteString;
 
     #[test]
     fn glob_is_anchored_and_operates_on_bytes() {

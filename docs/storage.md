@@ -115,19 +115,15 @@ client_dir=$(scripts/phase0/prepare-client.sh)
 tag=phase1-local
 
 for target in serve sync feed postgres phase1-serve phase1-sync; do
-  case "$target" in
-    phase1-*) image="gh-docs-$target" ;;
-    *) image="gh-docs-mcp-$target" ;;
-  esac
   docker --context default buildx build --network host --platform linux/amd64 \
-    --load --target "$target" -t "$image:$tag" .
+    --load --target "$target" -t "docs-mcp-$target:$tag" .
 done
 
 sudo -n python3 -B scripts/phase0/integration.py --skip-build --image-tag "$tag" \
   --node "$(command -v node)" --client-dir "$client_dir"
 sudo -n python3 -B scripts/phase1/integration.py --image-tag "$tag" \
   --node "$(command -v node)" --client-dir "$client_dir"
-python3 -B scripts/phase1/minikube.py --serve-image "gh-docs-phase1-serve:$tag"
+python3 -B scripts/phase1/minikube.py --serve-image "docs-mcp-phase1-serve:$tag"
 ```
 
 Use a disposable Minikube profile on a Docker engine with a working default bridge. Pass

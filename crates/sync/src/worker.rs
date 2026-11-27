@@ -10,14 +10,14 @@ use std::{
     time::Duration,
 };
 
-use gh_docs_core::Result;
+use docs_mcp_core::Result;
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
     net::UnixStream,
     process::{Child, Command},
 };
 
-pub const WORKER: &str = "/usr/local/bin/gh-docs-git-sync";
+pub const WORKER: &str = "/usr/local/bin/docs-mcp-git-sync";
 const GIT: &str = "/usr/local/bin/git";
 const MAX_REQUEST: usize = 256 * 1024;
 const MAX_FRAME: usize = 65_520;
@@ -115,7 +115,7 @@ impl GitProcess {
         )?;
         if status != Some(0) {
             #[cfg(feature = "fixtures")]
-            if std::env::var_os("GH_DOCS_PHASE2_DEBUG").is_some_and(|value| value == "1") {
+            if std::env::var_os("DOCS_MCP_PHASE2_DEBUG").is_some_and(|value| value == "1") {
                 eprintln!(
                     "synthetic Git worker status {status:?}: {}",
                     String::from_utf8_lossy(&stderr)
@@ -186,11 +186,11 @@ fn validate_odb(odb: &Path) -> Result<()> {
     };
     let config = read("config")?;
     if ![
-        gh_docs_core::git::ObjectFormat::Sha1,
-        gh_docs_core::git::ObjectFormat::Sha256,
+        docs_mcp_core::git::ObjectFormat::Sha1,
+        docs_mcp_core::git::ObjectFormat::Sha256,
     ]
     .iter()
-    .any(|&format| config == gh_docs_git::store::bare_config(format).as_bytes())
+    .any(|&format| config == docs_mcp_git::store::bare_config(format).as_bytes())
         || read("HEAD")? != b"ref: refs/heads/main\n"
     {
         return Err("private Git configuration changed".into());
@@ -263,13 +263,13 @@ pub async fn local_with_input(
 }
 
 pub async fn publication_read(
-    repo: gh_docs_core::git::RepositoryId,
-    format: gh_docs_core::git::ObjectFormat,
+    repo: docs_mcp_core::git::RepositoryId,
+    format: docs_mcp_core::git::ObjectFormat,
     args: &[std::ffi::OsString],
     max: usize,
     input: Stdio,
 ) -> Result<Vec<u8>> {
-    let odb = gh_docs_git::store::validate_canonical(repo, format)?;
+    let odb = docs_mcp_git::store::validate_canonical(repo, format)?;
     let mut child =
         GitProcess::spawn_with_input(Path::new(format.name()), &odb, args, None, input, true)?;
     let result = tokio::time::timeout(Duration::from_secs(180), child.output(max)).await;
@@ -305,7 +305,7 @@ pub fn launch(args: &[std::ffi::OsString]) -> Result<()> {
             .to_str()
             .ok_or("invalid canonical format")?
             .parse()?;
-        if gh_docs_git::store::validate_canonical(repo, format)? != source
+        if docs_mcp_git::store::validate_canonical(repo, format)? != source
             || !matches!(
                 command.first().and_then(|arg| arg.to_str()),
                 Some("fsck" | "cat-file")
@@ -313,11 +313,11 @@ pub fn launch(args: &[std::ffi::OsString]) -> Result<()> {
         {
             return Err("invalid canonical validation command".into());
         }
-        gh_docs_git::sandbox::confine_publication_validation(
+        docs_mcp_git::sandbox::confine_publication_validation(
             source.to_str().ok_or("invalid canonical path")?,
         )?;
     } else {
-        gh_docs_git::sandbox::confine_sync(
+        docs_mcp_git::sandbox::confine_sync(
             scratch.to_str().ok_or("invalid scratch path")?,
             broker,
         )?;
@@ -325,7 +325,7 @@ pub fn launch(args: &[std::ffi::OsString]) -> Result<()> {
     let mut git = std::process::Command::new(GIT);
     git.env_clear()
         .env("PATH", "/usr/local/bin")
-        .env("GIT_EXEC_PATH", "/usr/local/libexec/gh-docs-git")
+        .env("GIT_EXEC_PATH", "/usr/local/libexec/docs-mcp-git")
         .env("GIT_CONFIG_NOSYSTEM", "1")
         .env("GIT_CONFIG_GLOBAL", "/dev/null")
         .env("GIT_NO_REPLACE_OBJECTS", "1")
@@ -339,7 +339,7 @@ pub fn launch(args: &[std::ffi::OsString]) -> Result<()> {
             "-c",
             "protocol.allow=never",
             "-c",
-            "protocol.ghdocs.allow=always",
+            "protocol.docsmcp.allow=always",
             "-c",
             "core.hooksPath=/dev/null",
             "-c",

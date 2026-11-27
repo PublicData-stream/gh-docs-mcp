@@ -1,12 +1,12 @@
 use std::{fs::File, io::Read, net::SocketAddr, sync::Arc};
 
-use gh_docs_core::{Result, required};
-use gh_docs_mcp::{
+use docs_mcp::{
     control::{self, Command, Keys, Link, Outcome, Rejection},
     health, health_listener, mcp,
 };
-use gh_docs_search::exploration::{CursorKey, Explorer};
-use gh_docs_storage::connect;
+use docs_mcp_core::{Result, required};
+use docs_mcp_search::exploration::{CursorKey, Explorer};
+use docs_mcp_storage::connect;
 use rmcp::transport::streamable_http_server::StreamableHttpServerConfig;
 use tokio::net::TcpListener;
 
@@ -23,8 +23,8 @@ fn main() -> Result<()> {
             _ => return Err("invalid worker arguments".into()),
         };
         let result = match profile.as_str() {
-            "git" => gh_docs_git::phase0_probe(force_failure),
-            "search" => gh_docs_search::phase0_probe(force_failure),
+            "git" => docs_mcp_git::phase0_probe(force_failure),
+            "search" => docs_mcp_search::phase0_probe(force_failure),
             _ => return Err("unknown worker profile".into()),
         };
         return result.map_err(Into::into);
@@ -46,14 +46,14 @@ async fn run(mode: Option<&str>) -> Result<()> {
     let (client, driver) = connect(ROLE).await?;
     let fixture = mode == Some("--phase0-mcp-fixture");
     if let Some(probe) = mode.filter(|_| !fixture) {
-        let result = gh_docs_storage::probe(client, probe).await;
+        let result = docs_mcp_storage::probe(client, probe).await;
         driver.await?;
         return result;
     }
     let notify = control::enabled()? && !fixture;
     let mut notify_keys = None;
     let explorer = if fixture {
-        gh_docs_storage::verify_fixture(&client).await?;
+        docs_mcp_storage::verify_fixture(&client).await?;
         None
     } else {
         client
@@ -99,7 +99,7 @@ async fn run(mode: Option<&str>) -> Result<()> {
         let Some(keys) = notify_keys else {
             return std::future::pending().await;
         };
-        let address = control::address(&required("GH_DOCS_SERVE_NOTIFY_BIND")?)?;
+        let address = control::address(&required("DOCS_MCP_SERVE_NOTIFY_BIND")?)?;
         let listener = TcpListener::bind(address).await?;
         let client = Arc::new(client);
         control::serve(listener, Link::SyncServe, keys, move |command| {

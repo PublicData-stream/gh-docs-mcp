@@ -6,15 +6,15 @@ use std::{
 };
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use gh_docs_core::{
+use docs_mcp_core::{
     Result,
     git::{BytePath, ObjectFormat, ObjectType, Oid, RefName, RepositoryId, checked_range},
 };
-use gh_docs_git::{
+use docs_mcp_git::{
     reader::{Reachability, Reader, TreeMode},
     store::{self, Location, LockMode, LockScope},
 };
-use gh_docs_storage::{
+use docs_mcp_storage::{
     catalog::{self, FixtureDisposition, RefSnapshot},
     connect,
 };
@@ -57,7 +57,7 @@ struct Entry {
 
 pub async fn run(args: &[String]) -> Result<()> {
     let [mode, oracle, rest @ ..] = args else {
-        return Err("usage: gh-docs-phase1-fixture MODE ORACLE".into());
+        return Err("usage: docs-mcp-phase1-fixture MODE ORACLE".into());
     };
     let fixtures: Vec<Fixture> = serde_json::from_slice(&fs::read(oracle)?)?;
     for expected in &fixtures {

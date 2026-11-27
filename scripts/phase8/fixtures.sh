@@ -20,11 +20,11 @@ case "$(uname -m)" in
     *) exit 2 ;;
 esac
 args=()
-if [[ -n ${GH_DOCS_RELEASE_SEED:-} ]]; then
-    args+=(--build-context "cargo-registry-seed=$GH_DOCS_RELEASE_SEED")
+if [[ -n ${DOCS_MCP_RELEASE_SEED:-} ]]; then
+    args+=(--build-context "cargo-registry-seed=$DOCS_MCP_RELEASE_SEED")
 fi
 if [[ "$mode" != --current-only ]]; then
-    work=$(mktemp -d /tmp/ghdocs8-fixture-build.XXXXXXXX)
+    work=$(mktemp -d /tmp/docsmcp8-fixture-build.XXXXXXXX)
     trap 'rm -rf -- "$work"' EXIT
     git archive 45db1afb5e034c5fb02d633bd0b6973ffab9be35 | tar -x -C "$work"
     for role in serve sync feed; do
@@ -34,9 +34,7 @@ if [[ "$mode" != --current-only ]]; then
     done
 fi
 for role in "${roles[@]}"; do
-    prefix=gh-docs
-    case "$role" in serve|sync|feed|postgres) prefix=gh-docs-mcp ;; esac
     docker --context default buildx build --network host --allow network.host \
         --platform "linux/$arch" --load --target "$role" \
-        -t "$prefix-$role:$tag" "${args[@]}" .
+        -t "docs-mcp-$role:$tag" "${args[@]}" .
 done

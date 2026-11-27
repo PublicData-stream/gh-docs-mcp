@@ -12,7 +12,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use gh_docs_core::git::{ObjectFormat, ObjectType, Oid, RepositoryId, validate_component};
+use docs_mcp_core::git::{ObjectFormat, ObjectType, Oid, RepositoryId, validate_component};
 
 use crate::{
     process::{Process, ensure_time},
@@ -20,7 +20,7 @@ use crate::{
     store::{self, Fence, Location, LockMode, LockScope},
 };
 
-const READER: &str = "/usr/local/bin/gh-docs-git-reader";
+const READER: &str = "/usr/local/bin/docs-mcp-git-reader";
 const BLOB_BYTES: usize = 8 * 1024 * 1024;
 const TOTAL_BYTES: usize = 128 * 1024 * 1024;
 const TOTAL_OBJECTS: usize = 50_000;
@@ -130,7 +130,7 @@ impl Reader {
     }
 
     pub fn search_worker(&self) -> io::Result<Process> {
-        let mut command = Command::new("/usr/local/bin/gh-docs-search-worker");
+        let mut command = Command::new("/usr/local/bin/docs-mcp-search-worker");
         command.env_clear();
         if self.force_failure.load(Ordering::Relaxed) {
             command.arg("--fail-setup");

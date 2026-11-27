@@ -6,12 +6,12 @@ use std::{
     ops::Range,
 };
 
-use gh_docs_core::{
+use docs_mcp_core::{
     exploration::{ApprovedScope, Policy},
     git::{BytePath, ByteString, Oid},
 };
-use gh_docs_git::reader::{CommitLinks, TreeEntry, TreeMode};
-use gh_docs_storage::publication::Generation;
+use docs_mcp_git::reader::{CommitLinks, TreeEntry, TreeMode};
+use docs_mcp_storage::publication::Generation;
 use serde_json::{Value, json};
 use tokio::sync::OwnedSemaphorePermit;
 use tokio_postgres::Client;

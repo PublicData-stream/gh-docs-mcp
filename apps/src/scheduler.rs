@@ -2,9 +2,9 @@
 
 use std::{collections::HashSet, path::Path, sync::Arc, time::Duration};
 
-use gh_docs_core::{Result, git::RepositoryId, required};
-use gh_docs_storage::connect;
-use gh_docs_sync::{
+use docs_mcp_core::{Result, git::RepositoryId, required};
+use docs_mcp_storage::connect;
+use docs_mcp_sync::{
     publication::{self, Command as Publication},
     supervisor,
 };
@@ -41,7 +41,7 @@ struct Attempt {
 }
 
 pub async fn run() -> Result<()> {
-    let roster = match std::env::var("GH_DOCS_SYNC_ROSTER_FILE") {
+    let roster = match std::env::var("DOCS_MCP_SYNC_ROSTER_FILE") {
         Ok(path) if !path.is_empty() => control::config::<Vec<String>>(Path::new(&path), 8 * 1024)?,
         Ok(_) | Err(std::env::VarError::NotPresent) => Vec::new(),
         Err(error) => return Err(error.into()),
@@ -53,7 +53,7 @@ pub async fn run() -> Result<()> {
     if roster.len() > 128 || roster.iter().collect::<HashSet<_>>().len() != roster.len() {
         return Err("invalid scheduler roster".into());
     }
-    let concurrency = gh_docs_sync::concurrency()?;
+    let concurrency = docs_mcp_sync::concurrency()?;
     let (db, mut driver) = connect("gh_docs_sync").await?;
     if !db
         .query_one("SELECT pg_try_advisory_lock(-3::bigint)", &[])
@@ -69,9 +69,9 @@ pub async fn run() -> Result<()> {
         return Err("control links require independent keys".into());
     }
     let receiver =
-        TcpListener::bind(control::address(&required("GH_DOCS_SYNC_CONTROL_BIND")?)?).await?;
+        TcpListener::bind(control::address(&required("DOCS_MCP_SYNC_CONTROL_BIND")?)?).await?;
     let sender = control::Client::new(
-        control::address(&required("GH_DOCS_SYNC_SERVE_ADDR")?)?,
+        control::address(&required("DOCS_MCP_SYNC_SERVE_ADDR")?)?,
         Link::SyncServe,
         sender_keys,
     );

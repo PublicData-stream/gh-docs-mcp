@@ -16,7 +16,7 @@ use axum::{
     middleware::{self, Next},
     response::{IntoResponse, Response},
 };
-use gh_docs_search::exploration::{self, Error, Explorer};
+use docs_mcp_search::exploration::{self, Error, Explorer};
 use rmcp::{
     ErrorData, RoleServer, ServerHandler,
     model::{
@@ -80,7 +80,7 @@ fn identity() -> Implementation {
         "0.0.0" => "0.0.0-dev.archive",
         version => version,
     };
-    Implementation::new("gh-docs-mcp", version)
+    Implementation::new("docs-mcp", version)
 }
 
 fn response_meta() -> MetaObject {
@@ -368,7 +368,7 @@ pub fn with_trusted_proxy(
     router: Router,
     peer: IpAddr,
     expected: &str,
-) -> gh_docs_core::Result<Router> {
+) -> docs_mcp_core::Result<Router> {
     let authority: Authority = expected.parse()?;
     let host = HeaderValue::from_str(authority.host())?;
     let port = HeaderValue::from_str(&authority.port_u16().unwrap_or(443).to_string())?;

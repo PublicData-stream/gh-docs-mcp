@@ -13,7 +13,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use gh_docs_core::git::{ObjectFormat, RepositoryId};
+use docs_mcp_core::git::{ObjectFormat, RepositoryId};
 
 const SYNC_UID: u32 = 10002;
 const SYNC_GID: u32 = 10002;

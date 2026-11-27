@@ -1,4 +1,4 @@
-use gh_docs_core::Result;
+use docs_mcp_core::Result;
 
 fn main() -> Result<()> {
     let args: Vec<_> = std::env::args().skip(1).collect();
@@ -11,7 +11,7 @@ fn main() -> Result<()> {
 #[tokio::main]
 async fn cli(args: Vec<String>) -> Result<()> {
     if args.len() == 3 {
-        let status = gh_docs_sync::supervisor::run(&args).await?;
+        let status = docs_mcp_sync::supervisor::run(&args).await?;
         return if status.success() {
             Ok(())
         } else {
@@ -21,21 +21,21 @@ async fn cli(args: Vec<String>) -> Result<()> {
     let [child, repo, address, ca] = args.as_slice() else {
         return Err("expected fixture repository, address and CA".into());
     };
-    if child != gh_docs_sync::supervisor::CHILD {
+    if child != docs_mcp_sync::supervisor::CHILD {
         return Err("invalid fixture supervisor invocation".into());
     }
-    let lifeline = gh_docs_sync::supervisor::child_lifeline()?;
+    let lifeline = docs_mcp_sync::supervisor::child_lifeline()?;
     let address: std::net::SocketAddr = address.parse()?;
     if address.ip().is_unspecified() || address.ip().is_multicast() {
         return Err("invalid fixture address".into());
     }
-    let fixture = gh_docs_sync::Fixture {
+    let fixture = docs_mcp_sync::Fixture {
         address,
         ca: (ca != "-").then(|| ca.into()),
-        fault: std::env::var("GH_DOCS_FIXTURE_FAULT").ok(),
+        fault: std::env::var("DOCS_MCP_FIXTURE_FAULT").ok(),
     };
-    let (client, driver) = gh_docs_storage::connect("gh_docs_sync").await?;
-    let result = gh_docs_sync::reconcile(&client, repo.parse()?, Some(fixture), lifeline).await;
+    let (client, driver) = docs_mcp_storage::connect("gh_docs_sync").await?;
+    let result = docs_mcp_sync::reconcile(&client, repo.parse()?, Some(fixture), lifeline).await;
     drop(client);
     driver.await?;
     result
@@ -43,7 +43,7 @@ async fn cli(args: Vec<String>) -> Result<()> {
 
 fn confinement() -> Result<()> {
     use std::{fs::File, net::TcpStream};
-    gh_docs_git::sandbox::confine_sync("/git-sync-scratch/1", false)?;
+    docs_mcp_git::sandbox::confine_sync("/git-sync-scratch/1", false)?;
     let denied = |error: &std::io::Error| error.kind() == std::io::ErrorKind::PermissionDenied;
     if !matches!(File::open("/run/secrets/db-password"), Err(error) if denied(&error))
         || !matches!(TcpStream::connect("127.0.0.1:9"), Err(error) if denied(&error))

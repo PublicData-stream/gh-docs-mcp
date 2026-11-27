@@ -5,13 +5,13 @@ use std::{
     time::{Duration, Instant},
 };
 
-use gh_docs_core::{
+use docs_mcp_core::{
     Result,
     git::{ObjectType, Oid, RepositoryId},
 };
-use gh_docs_git::reader::Reachability;
-use gh_docs_storage::{connect, publication::read_generation};
-use gh_docs_sync::publication::{self, Command, Fault};
+use docs_mcp_git::reader::Reachability;
+use docs_mcp_storage::{connect, publication::read_generation};
+use docs_mcp_sync::publication::{self, Command, Fault};
 use serde_json::json;
 
 #[tokio::main]
@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
             let command =
                 Command::parse(flag, rest)?.ok_or("unknown fixture publication command")?;
             let (client, driver) = connect("gh_docs_sync").await?;
-            let fault = Fault::fixture(std::env::var("GH_DOCS_PHASE3_FAULT").ok());
+            let fault = Fault::fixture(std::env::var("DOCS_MCP_PHASE3_FAULT").ok());
             let result = publication::run(&client, repository.parse()?, command, &fault).await;
             drop(client);
             driver.await?;

@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 source_dir=$(CDPATH='' cd -- "$(dirname -- "$0")/client" && pwd)
-client_dir=$(mktemp -d /tmp/gh-docs-client.XXXXXXXX)
+client_dir=$(mktemp -d /tmp/docs-mcp-client.XXXXXXXX)
 trap 'rm -rf -- "$client_dir"' EXIT
 package_manager=$(node -p 'require(process.argv[1]).packageManager' "$source_dir/package.json")
 actual_package_manager="pnpm@$(pnpm --version)"

@@ -67,11 +67,11 @@ sudo -n python3 -B scripts/phase7/integration.py --image-tag "$tag"
 sudo -n python3 -B scripts/phase7/capacity.py --image-tag "$tag" --out "$receipt/capacity.jsonl"
 
 python3 -B scripts/phase7/minikube.py \
-  --serve-image "gh-docs-mcp-serve:$tag" \
-  --sync-image "gh-docs-phase6-sync:$tag" \
-  --feed-image "gh-docs-phase6-feed:$tag" \
-  --upstream-image "gh-docs-phase2-upstream:$tag" \
-  --postgres-image "gh-docs-mcp-postgres:$tag" \
+  --serve-image "docs-mcp-serve:$tag" \
+  --sync-image "docs-mcp-phase6-sync:$tag" \
+  --feed-image "docs-mcp-phase6-feed:$tag" \
+  --upstream-image "docs-mcp-phase2-upstream:$tag" \
+  --postgres-image "docs-mcp-postgres:$tag" \
   --bootstrap-cache "$bootstrap_cache"
 ~~~
 

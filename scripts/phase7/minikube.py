@@ -24,8 +24,8 @@ def resources(root, args):
     pod["volumes"].append({"name": "probe-scratch", "emptyDir": {"medium": "Memory", "sizeLimit": "2Mi"}})
     probe = phase6.container(
         "confinement", args.serve_image, 10001, ["/bin/sh", "-ec", """
-        gh-docs-search-worker --probe-denials
-        test "$(gh-docs-search-worker --fail-setup)" = -
+        docs-mcp-search-worker --probe-denials
+        test "$(docs-mcp-search-worker --fail-setup)" = -
         test ! -e /git-sync-private
         echo 'Framed worker denial and failed setup passed'
         """],

@@ -5,5 +5,5 @@ pub mod exploration;
 pub mod worker;
 
 pub fn phase0_probe(force_failure: bool) -> std::io::Result<()> {
-    gh_docs_git::sandbox::probe(gh_docs_git::sandbox::Profile::Search, force_failure)
+    docs_mcp_git::sandbox::probe(docs_mcp_git::sandbox::Profile::Search, force_failure)
 }

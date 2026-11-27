@@ -95,7 +95,7 @@ def failed_acquisition(wire, upstream, endpoint, repo, expected):
             mode.write_text("normal")
         assert wire.resolve(repo) == expected
     phase2.fetch(stack, repo, endpoint, reason={"storage_quota"},
-                 env=("-e", "GH_DOCS_SYNC_QUOTA_BYTES=402653184"))
+                 env=("-e", "DOCS_MCP_SYNC_QUOTA_BYTES=402653184"))
     assert wire.resolve(repo) == expected
     invalid_tree = phase5.git(origin, "hash-object", "--literally", "-w", "-t", "tree",
                               "--stdin", data=b"invalid synthetic tree").strip()
@@ -120,7 +120,7 @@ def worker_shutdown(wire, repo, proof):
     })) as request:
         hold = """
         for _ in $(seq 1 100); do
-          pid=$(pgrep -f '^/usr/local/bin/gh-docs-search-worker$' | head -n 1)
+          pid=$(pgrep -f '^/usr/local/bin/docs-mcp-search-worker$' | head -n 1)
           if [ -n "$pid" ] && kill -STOP "$pid" 2>/dev/null; then exit 0; fi
           sleep .02
         done
@@ -243,7 +243,7 @@ def main():
     signal.signal(signal.SIGTERM, phase2.phase0.terminate)
     print(f"{datetime.now(timezone.utc).isoformat()} Phase 7 Compose qualification", flush=True)
     with phase2.stack(args.image_tag, publication=True, fixture_setup=prepare,
-                      serve_target="mcp-serve") as (stack, upstream, configuration, endpoint):
+                      serve_target="serve") as (stack, upstream, configuration, endpoint):
         wire = phase5.Wire(stack)
         wire.validate_registry()
         phase2.phase0.worker_tests(stack)

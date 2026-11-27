@@ -1,5 +1,5 @@
 [package]
-name = "gh-docs-mcp"
+name = "docs-mcp"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -16,35 +16,35 @@ serde.workspace = true
 sha2.workspace = true
 tokio-postgres.workspace = true
 uuid.workspace = true
-gh-docs-core = { path = "../crates/core" }
-gh-docs-git = { path = "../crates/git" }
-gh-docs-search = { path = "../crates/search" }
-gh-docs-storage = { path = "../crates/storage" }
-gh-docs-sync = { path = "../crates/sync" }
-gh-docs-test-support = { path = "../crates/test-support", optional = true }
+docs-mcp-core = { path = "../crates/core" }
+docs-mcp-git = { path = "../crates/git" }
+docs-mcp-search = { path = "../crates/search" }
+docs-mcp-storage = { path = "../crates/storage" }
+docs-mcp-sync = { path = "../crates/sync" }
+docs-mcp-test-support = { path = "../crates/test-support", optional = true }
 rmcp.workspace = true
 schemars.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
 
 [features]
-phase1-fixtures = ["dep:gh-docs-test-support"]
-phase2-fixtures = ["gh-docs-sync/fixtures"]
-phase4-fixtures = ["gh-docs-search/fixtures"]
-phase6-fixtures = ["gh-docs-sync/fixtures"]
+phase1-fixtures = ["dep:docs-mcp-test-support"]
+phase2-fixtures = ["docs-mcp-sync/fixtures"]
+phase4-fixtures = ["docs-mcp-search/fixtures"]
+phase6-fixtures = ["docs-mcp-sync/fixtures"]
 
 [[bin]]
-name = "gh-docs-phase1-fixture"
+name = "docs-mcp-phase1-fixture"
 required-features = ["phase1-fixtures"]
 
 [[bin]]
-name = "gh-docs-phase2-fixture"
+name = "docs-mcp-phase2-fixture"
 required-features = ["phase2-fixtures"]
 
 [[bin]]
-name = "gh-docs-phase3-fixture"
+name = "docs-mcp-phase3-fixture"
 required-features = ["phase2-fixtures"]
 
 [[bin]]
-name = "gh-docs-phase4-fixture"
+name = "docs-mcp-phase4-fixture"
 required-features = ["phase4-fixtures"]

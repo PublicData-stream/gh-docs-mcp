@@ -1,6 +1,6 @@
 //! Read-only projection of current, reviewed exploration scope.
 
-use gh_docs_core::{
+use docs_mcp_core::{
     Result,
     exploration::{ExplorationApproval, Policy},
     git::{ObjectFormat, RefName, RepositoryId},

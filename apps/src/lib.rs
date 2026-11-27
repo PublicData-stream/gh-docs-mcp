@@ -5,7 +5,7 @@ pub mod mcp;
 pub mod scheduler;
 
 use axum::{Router, http::StatusCode, routing::get};
-use gh_docs_core::{Result, health_bind};
+use docs_mcp_core::{Result, health_bind};
 use tokio::net::TcpListener;
 
 pub async fn health_listener() -> Result<TcpListener> {

@@ -62,8 +62,8 @@ def job_resources(image, bundle):
                             "reader", 10001,
                             ["/bin/sh", "-ec",
                              "test ! -e /git-sync-private\n"
-                             "gh-docs-phase1-fixture read /phase1-oracle.json\n"
-                             "gh-docs-phase1-fixture fail-setup /phase1-oracle.json\n"
+                             "docs-mcp-phase1-fixture read /phase1-oracle.json\n"
+                             "docs-mcp-phase1-fixture fail-setup /phase1-oracle.json\n"
                              "echo 'sandbox setup failure denied for both formats'"],
                             [
                                 {"name": "fixture", "mountPath": "/git-store",
@@ -80,7 +80,7 @@ def job_resources(image, bundle):
 
 
 def run_smoke(args):
-    profile = f"ghdocs1-{secrets.token_hex(5)}"
+    profile = f"docsmcp1-{secrets.token_hex(5)}"
     root = Path(tempfile.mkdtemp(prefix=f"{profile}-minikube-", dir="/tmp"))
     environment = {
         **os.environ, "MINIKUBE_HOME": str(root), "KUBECONFIG": str(root / "kubeconfig"),

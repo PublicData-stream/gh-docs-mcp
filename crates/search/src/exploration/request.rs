@@ -1,4 +1,4 @@
-use gh_docs_core::git::{BytePath, ByteString, ObjectFormat, Oid, RepositoryId};
+use docs_mcp_core::git::{BytePath, ByteString, ObjectFormat, Oid, RepositoryId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 

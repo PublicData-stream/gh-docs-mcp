@@ -20,7 +20,7 @@ phase2 = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(phase2)
 
 sql = phase2.sql
-FIXTURE = "gh-docs-phase3-fixture"
+FIXTURE = "docs-mcp-phase3-fixture"
 INSTALL_FAULTS = (
     ("before_install_intent", "verified"),
     ("after_install_intent", "ready"),
@@ -47,12 +47,12 @@ def command(stack, repo, flag, generation=None, *, seq=None, fault=None, deny=Fa
     if seq is not None:
         argv += ["--sequence" if flag == "--status" else "--expect-sequence", str(seq)]
     if fault:
-        argv = ["exec", "-T", "-e", f"GH_DOCS_PHASE3_FAULT={fault}", "sync",
+        argv = ["exec", "-T", "-e", f"DOCS_MCP_PHASE3_FAULT={fault}", "sync",
                 FIXTURE, flag, repo, *argv[3:]]
         result = stack.compose(*argv, expected=None, timeout=75)
         assert result.returncode in (137, -9), (fault, result.returncode, result.stdout)
         return None
-    result = stack.exec("sync", "gh-docs-sync", *argv, expected=None if deny else 0, timeout=75)
+    result = stack.exec("sync", "docs-mcp-sync", *argv, expected=None if deny else 0, timeout=75)
     if deny:
         assert result.returncode, result.stdout
         return result.stdout
@@ -183,7 +183,7 @@ def abort_outbox_transaction(stack, repo, generation, seq, timing):
         CREATE TRIGGER fixture_outbox {timing} INSERT ON git_catalog.notification_outbox
           FOR EACH ROW EXECUTE FUNCTION public.phase3_pause_outbox();
     """)
-    argv = [*stack.compose_command, "exec", "-T", "sync", "gh-docs-sync", "--publish",
+    argv = [*stack.compose_command, "exec", "-T", "sync", "docs-mcp-sync", "--publish",
             "--repository", repo, "--generation", str(generation), "--expect-sequence", str(seq)]
     try:
         with subprocess.Popen(argv, cwd=ROOT, env=stack.context, stdout=subprocess.PIPE,

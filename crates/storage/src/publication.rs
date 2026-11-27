@@ -8,11 +8,11 @@ use std::{
     time::{Duration, Instant},
 };
 
-use gh_docs_core::{
+use docs_mcp_core::{
     Result,
     git::{ObjectFormat, Oid, RepositoryId},
 };
-use gh_docs_git::{
+use docs_mcp_git::{
     reader::{Batch, Reachability, Reader},
     store::{self, Fence, LockMode, LockScope},
 };
@@ -259,9 +259,9 @@ async fn read<T: Send + 'static>(
         .into_iter()
         .map(|row| -> Result<_> {
             Ok(RefSnapshot {
-                name: gh_docs_core::git::RefName::new(row.get::<_, Vec<u8>>(0))?,
+                name: docs_mcp_core::git::RefName::new(row.get::<_, Vec<u8>>(0))?,
                 target: Oid::from_bytes(format, row.get(1))?,
-                kind: gh_docs_core::git::ObjectType::parse(row.get::<_, &str>(2).as_bytes())?,
+                kind: docs_mcp_core::git::ObjectType::parse(row.get::<_, &str>(2).as_bytes())?,
                 peeled_commit: row
                     .get::<_, Option<&[u8]>>(3)
                     .map(|bytes| Oid::from_bytes(format, bytes))

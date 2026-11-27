@@ -360,6 +360,120 @@ dependencies = [
 ]
 
 [[package]]
+name = "docs-mcp"
+version = "0.0.0"
+dependencies = [
+ "axum",
+ "base64 0.22.1",
+ "docs-mcp-core",
+ "docs-mcp-git",
+ "docs-mcp-search",
+ "docs-mcp-storage",
+ "docs-mcp-sync",
+ "docs-mcp-test-support",
+ "getrandom 0.4.3",
+ "hmac",
+ "httparse",
+ "rmcp",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tokio-postgres",
+ "uuid",
+]
+
+[[package]]
+name = "docs-mcp-core"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "schemars",
+ "serde",
+ "serde_json",
+ "sha2",
+ "uuid",
+]
+
+[[package]]
+name = "docs-mcp-git"
+version = "0.0.0"
+dependencies = [
+ "docs-mcp-core",
+ "libc",
+ "uuid",
+]
+
+[[package]]
+name = "docs-mcp-search"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "docs-mcp-core",
+ "docs-mcp-git",
+ "docs-mcp-storage",
+ "grep-matcher",
+ "grep-regex",
+ "ring",
+ "schemars",
+ "serde",
+ "serde_json",
+ "tokio",
+ "tokio-postgres",
+ "uuid",
+]
+
+[[package]]
+name = "docs-mcp-storage"
+version = "0.0.0"
+dependencies = [
+ "docs-mcp-core",
+ "docs-mcp-git",
+ "rustls",
+ "serde_json",
+ "tokio",
+ "tokio-postgres",
+ "tokio-postgres-rustls",
+ "uuid",
+]
+
+[[package]]
+name = "docs-mcp-sync"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "chrono",
+ "docs-mcp-core",
+ "docs-mcp-git",
+ "docs-mcp-storage",
+ "hickory-resolver",
+ "libc",
+ "reqwest",
+ "rustls",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tokio",
+ "tokio-postgres",
+ "uuid",
+]
+
+[[package]]
+name = "docs-mcp-test-support"
+version = "0.0.0"
+dependencies = [
+ "base64 0.22.1",
+ "docs-mcp-core",
+ "docs-mcp-git",
+ "docs-mcp-storage",
+ "serde",
+ "serde_json",
+ "tokio-postgres",
+ "uuid",
+]
+
+[[package]]
 name = "dyn-clone"
 version = "1.0.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -523,120 +637,6 @@ dependencies = [
  "libc",
  "r-efi",
  "rand_core",
-]
-
-[[package]]
-name = "gh-docs-core"
-version = "0.0.0"
-dependencies = [
- "base64 0.22.1",
- "schemars",
- "serde",
- "serde_json",
- "sha2",
- "uuid",
-]
-
-[[package]]
-name = "gh-docs-git"
-version = "0.0.0"
-dependencies = [
- "gh-docs-core",
- "libc",
- "uuid",
-]
-
-[[package]]
-name = "gh-docs-mcp"
-version = "0.0.0"
-dependencies = [
- "axum",
- "base64 0.22.1",
- "getrandom 0.4.3",
- "gh-docs-core",
- "gh-docs-git",
- "gh-docs-search",
- "gh-docs-storage",
- "gh-docs-sync",
- "gh-docs-test-support",
- "hmac",
- "httparse",
- "rmcp",
- "schemars",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "tokio-postgres",
- "uuid",
-]
-
-[[package]]
-name = "gh-docs-search"
-version = "0.0.0"
-dependencies = [
- "base64 0.22.1",
- "gh-docs-core",
- "gh-docs-git",
- "gh-docs-storage",
- "grep-matcher",
- "grep-regex",
- "ring",
- "schemars",
- "serde",
- "serde_json",
- "tokio",
- "tokio-postgres",
- "uuid",
-]
-
-[[package]]
-name = "gh-docs-storage"
-version = "0.0.0"
-dependencies = [
- "gh-docs-core",
- "gh-docs-git",
- "rustls",
- "serde_json",
- "tokio",
- "tokio-postgres",
- "tokio-postgres-rustls",
- "uuid",
-]
-
-[[package]]
-name = "gh-docs-sync"
-version = "0.0.0"
-dependencies = [
- "base64 0.22.1",
- "chrono",
- "gh-docs-core",
- "gh-docs-git",
- "gh-docs-storage",
- "hickory-resolver",
- "libc",
- "reqwest",
- "rustls",
- "serde",
- "serde_json",
- "sha2",
- "tokio",
- "tokio-postgres",
- "uuid",
-]
-
-[[package]]
-name = "gh-docs-test-support"
-version = "0.0.0"
-dependencies = [
- "base64 0.22.1",
- "gh-docs-core",
- "gh-docs-git",
- "gh-docs-storage",
- "serde",
- "serde_json",
- "tokio-postgres",
- "uuid",
 ]
 
 [[package]]

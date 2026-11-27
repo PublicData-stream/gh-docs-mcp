@@ -1,5 +1,5 @@
 {
-  "name": "gh-docs-phase0-client",
+  "name": "docs-mcp-phase0-client",
   "private": true,
   "type": "module",
   "packageManager": "pnpm@12.23.0",
