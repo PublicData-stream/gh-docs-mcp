@@ -3,6 +3,7 @@
 import argparse
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from functools import partial
 import ipaddress
 import json
 import os
@@ -28,7 +29,8 @@ APPROVAL = "/phase2-approval.json"
 
 
 @contextmanager
-def stack(tag, *, publication=False, fixture_setup=prepare, serve_target=None, control=False):
+def stack(tag, *, publication=False, fixture_setup=prepare, serve_target=None, control=False, host=HOST,
+          configure_stack=None):
     phase = 6 if control else 5 if serve_target == "serve" else 4 if serve_target == "phase4-serve" else 3 if publication else 2
     project = f"docsmcp{phase}-{secrets.token_hex(5)}"
     root = Path(tempfile.mkdtemp(prefix=f"{project}-", dir="/tmp"))
@@ -50,7 +52,7 @@ def stack(tag, *, publication=False, fixture_setup=prepare, serve_target=None, c
         **serve,
         "sync": {
             "image": f"docs-mcp-{sync}:{tag}",
-            "extra_hosts": {HOST: address},
+            "extra_hosts": {host: address},
             "volumes": [{"type": "bind", "source": str(upstream / "tls/ca.crt"), "target": CA, "read_only": True}],
         },
         "migrate": {"volumes": [{"type": "bind", "source": str(approval_path), "target": APPROVAL, "read_only": True}]},
@@ -69,6 +71,8 @@ def stack(tag, *, publication=False, fixture_setup=prepare, serve_target=None, c
     installed = False
     cleaned = False
     try:
+        if configure_stack:
+            configure_stack(instance, override)
         instance.create()
         instance.compose("create", "--no-build", "--pull", "never", "upstream")
         firewall.install(table, instance.env, root, sync_fixture=True, control=control, feed_fixture=control)
@@ -156,9 +160,9 @@ def register(stack, path, policy):
     return stack.compose("run", "--rm", "--no-deps", "migrate", "--register-source", "--approval-file", APPROVAL)
 
 
-def fetch(stack, repository, endpoint, ca=CA, *, reason=None, env=()):
+def fetch(stack, repository, endpoint, ca=CA, *, reason=None, env=(), binary="docs-mcp-phase2-fixture"):
     debug = ("-e", "DOCS_MCP_PHASE2_DEBUG=1") if os.environ.get("DOCS_MCP_PHASE2_DEBUG") == "1" else ()
-    command = ["exec", "-T", *debug, *env, "sync", "docs-mcp-phase2-fixture", repository, endpoint, ca]
+    command = ["exec", "-T", *debug, *env, "sync", binary, repository, endpoint, ca]
     response = stack.compose(*command, expected=0 if reason is None else None, timeout=100)
     reports = [json.loads(line) for line in response.stdout.splitlines() if line.startswith("{")]
     assert len(reports) == 1, response.stdout
@@ -278,6 +282,31 @@ def concurrent_admission(stack, repository, endpoint, upstream):
     assert_private(stack)
 
 
+def qualify_alternate_host(tag):
+    host = "manuals.code.example.test"
+    namespace = "team/manuals"
+    setup = partial(prepare, host=host, namespace=namespace)
+    with stack(tag, fixture_setup=setup, host=host) as (instance, upstream, approval_file, endpoint):
+        repo, _ = REPOS["sha256"]
+        denied = instance.exec("sync", "docs-mcp-phase2-fixture", repo, endpoint, CA, expected=None)
+        assert denied.returncode and "no active HTTPS approval" in denied.stdout, denied.stdout
+        assert sql(instance, "SELECT count(*) FROM git_catalog.sync_jobs") == "0"
+
+        wrong_repo, wrong_source = REPOS["sha1"]
+        register(instance, approval_file, approval(
+            "sha256", host="other.code.example.test", ref_base=f"{namespace}/sha256",
+            repository=wrong_repo, source=wrong_source,
+        ))
+        fetch(instance, wrong_repo, endpoint, reason={"upstream_connection_or_tls"})
+        assert sql(instance, "SELECT count(*) FROM git_catalog.private_candidates") == "0"
+
+        register(instance, approval_file, approval("sha256", host=host, ref_base=f"{namespace}/sha256"))
+        report = fetch(instance, repo, endpoint)
+        verify_candidate(instance, upstream, "sha256", report)
+        assert_private(instance)
+        print("Alternate HTTPS host and nested Git path passed approval and TLS hostname checks", flush=True)
+
+
 def qualify(args):
     with stack(args.image_tag) as (instance, upstream, approval_file, endpoint):
         initial = {}
@@ -378,6 +407,7 @@ def qualify(args):
         assert denied.returncode and "no active HTTPS approval" in denied.stdout, denied.stdout
         assert_private(instance)
         print("A07 and Phase 2 A08 synthetic qualification passed", flush=True)
+    qualify_alternate_host(args.image_tag)
 
 
 if __name__ == "__main__":

@@ -20,7 +20,9 @@ amd64. See the [release gate](release-readiness.md) for qualification status.
    `FIXTURES` holds the deployment's state and role directories. Use dedicated,
    non-overlapping subnets. Keep the Compose port on host loopback. Install
    the qualified bridge and routed nftables rules before starting roles.
-   The private candidate allows approved synthetic endpoints only.
+   The qualification profile uses synthetic endpoints. For live sources,
+   provision egress for each approved Git host using the
+   [source onboarding procedure](synchronization.md#source-approval).
 3. Provision `store`, `staging`, and `pgdata` as distinct bind directories on
    the qualified filesystem. Run the networkless `volume-admin` once on fresh
    volumes. PostgreSQL starts as UID/GID 70 and requires the data and socket
@@ -98,3 +100,40 @@ when verified against the current catalog and store format. For an
 incompatible schema or failed store migration, provision fresh volumes and
 restore the matched pre-upgrade backup, previous images and proxy configuration. Reconcile
 revocations and credential changes made after the backup before reopening.
+
+### Move from gh-docs-mcp to docs-mcp
+
+The `2.0.0` cutover reuses the existing Compose project and data. Keep the
+absolute `FIXTURES` path, the `store`, `staging`, and `pgdata` bind mounts,
+the `gh_docs` database and its roles, and the network configuration and
+firewall. Keep the TLS hostname and role secrets including cursor and
+control keys. Save the previous Compose files, private environment, and
+four image digests for rollback.
+
+1. Stage a new private environment file with the four qualified
+   `DOCS_MCP_*_IMAGE` values. Replace each configured `GH_DOCS_*` setting
+   with its `DOCS_MCP_*` counterpart. Use `DOCS_MCP_AUTHORITY` for the
+   old `GH_DOCS_MCP_AUTHORITY`. Update automation to call
+   `docs-mcp-serve`, `docs-mcp-sync`, or `docs-mcp-feed`, and update any
+   client filters that expect the old MCP server name. Render the new
+   Compose configuration against the existing project and check the
+   images, bind mounts, and configured control mode. Pull the four pinned
+   images before closing ingress.
+2. Stop the proxy and feed, settle active Sync and publication work, and stop
+   Sync and Serve. With PostgreSQL still running, capture and verify the
+   [coordinated backup](publication.md#backup-and-restore).
+3. Stop PostgreSQL. Using the new files and environment with the same
+   `-p "$project"`, bring up PostgreSQL with
+   `up -d --no-build --wait postgres` and run the migrator. Start Serve
+   and Sync, and start Feed if it was enabled. Check health, grants, and the
+   active generation and sequence. Check control delivery when enabled.
+   Start the proxy on loopback and verify TLS, MCP discovery, and a known
+   read before restoring client access.
+4. To roll back on the existing state, close ingress, quiesce the roles,
+   then stop PostgreSQL and repeat the startup checks with the saved old
+   Compose files, environment, and image digests. Use the verified backup
+   and the [restore procedure](publication.md#backup-and-restore) if the
+   existing state cannot be reopened.
+
+The [cutover rehearsal](release-readiness.md#rehearse-the-rename) exercises
+both directions on a populated synthetic deployment.

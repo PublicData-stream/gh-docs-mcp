@@ -45,6 +45,30 @@ Use `--image-load-timeout 420` when the local image import needs a longer bound.
 Remove only the temporary image tags and SDK fixture created for the run.
 Keep the sanitized evidence.
 
+### Rehearse the rename
+
+Build the current fixture images with `scripts/phase8/fixtures.sh "$tag" --current-only`.
+Build the old roles from the last pre-rename source under the same unique
+local tag. The rehearsal uses the fixture Sync image to reach the synthetic
+upstream. Run from the repository root on the rootful Compose host.
+
+```sh
+previous=$(mktemp -d /tmp/docs-mcp-previous.XXXXXXXX)
+git archive b84408720019424fdaf0ca5b5753fe287d427334 | tar -x -C "$previous"
+for role in serve sync feed postgres; do
+  target=$role
+  if [ "$role" = sync ]; then
+    target=phase6-sync
+  fi
+  docker --context default buildx build --network host --allow network.host \
+    --load --target "$target" -t "gh-docs-mcp-$role:$tag" "$previous"
+done
+sudo -n python3 -B scripts/phase8/cutover.py --image-tag "$tag" --previous-source "$previous"
+```
+
+Remove the four test-only baseline tags and archive after the run. The probe
+removes its own Compose stack, firewall tables, and generated fixture data.
+
 ## Gate and operator review
 
 Release requires matched digests and passed native tests for both platforms,

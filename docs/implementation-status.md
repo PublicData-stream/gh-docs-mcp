@@ -1040,3 +1040,41 @@ The SDK fixture used Node `26.13.1` and pnpm `12.23.0`. A missing-image
 run returned failure and produced diagnostics for both requested phases.
 Fixture tags, Compose resources, firewall rules, and generated fixture
 directories were removed. The new hosted CI matrix is pending its first run.
+
+## docs-mcp rename and cutover
+
+On 2026-11-27, the rename and onboarding changes based on `b84408720019`
+passed the offline Rust 1.100.0 gate, actionlint 1.17.1, and the 12 release
+helper tests, including the loopback OCI registry. The external Cargo
+dependency graph, SQL migrations, and MCP tool schema snapshot match the
+pre-rename inputs.
+
+Rootful Compose Phases 0–7 passed on Linux amd64 with kernel
+`7.0.0-44-generic`, Docker 29.10.1, Compose 5.8.0, and ext4-backed `/tmp`.
+The SDK checks used Node 26.13.1 and pnpm 12.23.0. Phase 5 passed after
+correcting the Serve image name in the harness. Phase 6 passed after the
+harness explicitly restarted the Sync container following the injected
+SIGKILL and verified its readiness before waiting for outbox delivery.
+
+The synthetic Compose probe verified SHA-1 and SHA-256 acquisition across
+two HTTPS hostnames. The alternate host served a nested repository path.
+Sync rejected an unapproved repository before opening a job and rejected a
+certificate valid for a different hostname.
+
+The [cutover rehearsal](release-readiness.md#rehearse-the-rename) built the old
+roles from `b84408720019424fdaf0ca5b5753fe287d427334`. The rehearsal verified
+a coordinated backup, then reused the same PostgreSQL and Git directories
+and role keys. Both versions returned the same catalog pointers and
+published bytes. Cursors worked across the switch in both directions. The
+renamed Sync reused a retained candidate, published a new generation, and
+delivered its outbox notification. The old roles read that generation
+after rollback.
+
+The Phase 2 and Phase 7 Restricted Minikube smokes passed on Linux amd64
+using Minikube 1.39.0, Kubernetes 1.37.0, and rootless Docker with containerd.
+Phase 2 verified private fetches for both object formats. Phase 7 exercised
+feed-to-MCP delivery and worker confinement. Both disposable profiles were
+removed.
+
+The local fixture containers, networks, image tags, firewall tables, and
+SDK fixture were removed. These results cover the local synthetic profiles.

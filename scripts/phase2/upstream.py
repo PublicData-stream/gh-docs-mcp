@@ -11,6 +11,11 @@ from urllib.parse import urlsplit
 
 
 ROOT = Path("/fixture")
+GIT_PATHS = {
+    f"/{repository}/{operation}"
+    for repository in ("sha1.git", "sha256.git", "cross.git", "team/manuals/sha256.git")
+    for operation in ("info/refs", "git-upload-pack")
+}
 
 
 class Endpoint(http.server.BaseHTTPRequestHandler):
@@ -26,11 +31,7 @@ class Endpoint(http.server.BaseHTTPRequestHandler):
             self.send_response(200)
             self.end_headers()
             return
-        parts = path.path.split("/")
-        if len(parts) < 3 or parts[1] not in ("sha1.git", "sha256.git", "cross.git"):
-            self.send_error(404)
-            return
-        if path.path not in (f"/{parts[1]}/info/refs", f"/{parts[1]}/git-upload-pack"):
+        if path.path not in GIT_PATHS:
             self.send_error(404)
             return
         mode = (ROOT / "mode").read_text().strip()

@@ -1,6 +1,9 @@
 # 0004 — Source approval and redistribution
 
-Phase 0 starts with an empty live allowlist. The owner identified `https://github.com/github/docs` for review. Its current default branch `refs/heads/main` is the candidate ref. GitHub Docs identifies separate license terms for documentation and code. Review licenses, notices, assets, third-party content, and historical versions at the revisions in scope before authorizing reads or fetches.
+The live allowlist starts empty. Operators may review a repository from any Git
+host that meets the [synchronization requirements](../synchronization.md#source-approval).
+Review licenses, notices, assets, third-party content, and historical versions
+at the revisions in scope before authorizing reads or fetches.
 
 An approval records canonical HTTPS upstream identity, exact ref and path scope, approved history and output forms, reviewer, decision time, policy version, and supporting license and notice evidence. Bound full history to approved refs and evaluate metadata and derived outputs such as search and blame under the same policy. Exclude ambiguous scope until reviewed. Carry notice material alongside source results and preserve original bytes.
 
@@ -13,4 +16,6 @@ author and committer email addresses alongside other history metadata. Path
 grants apply to each side of a diff and each attributed blame line.
 [Phase 5 approvals](../mcp.md#approve-output-forms)
 
-[GitHub Docs upstream license summary](https://github.com/github/docs#license)
+During Phase 0, the owner identified `github/docs` and `refs/heads/main` as a
+candidate for review. It remains unapproved. Its documentation and code have
+separate license terms. [GitHub Docs upstream license summary](https://github.com/github/docs#license)

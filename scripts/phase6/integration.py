@@ -295,7 +295,9 @@ def run(stack, upstream, config, endpoint):
     assert not delivered(stack, second)
     fault(stack, "serve", "after_notification_observed")
     fault(stack, "sync")
-    stack.compose("start", "sync")
+    # Start the same container explicitly after the injected SIGKILL.
+    phase2.phase0.run([*phase2.phase0.DOCKER, "restart", stack.ids["sync"]])
+    ready(stack, "sync")
     assert exited(stack, "serve") == "86"
     assert not delivered(stack, second)
     fault(stack, "serve")

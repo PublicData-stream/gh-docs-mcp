@@ -8,12 +8,22 @@ synthetic sources only.
 
 ## Source approval
 
+Choose a canonical repository URL from a host that serves anonymous Git Smart
+HTTP v2 over HTTPS on port 443. Use the exact lower-case DNS hostname, a
+repository path, and publicly routable DNS answers. The path may include nested
+groups. The broker verifies the certificate for the approved hostname and
+rejects redirects.
+
+Review the complete Git object closure reachable from the selected refs before
+approving acquisition. Review license and notice evidence for the exact history
+and paths the service will expose, including derived outputs such as search and
+blame. Each repository has one source identity. Use UUIDv4 identifiers for the
+repository and source, and include the approved hostname in `hosts`.
+
 Use the migration credential to register and revoke approvals. Mount approval
-documents read-only into the operator service. Each registration for the same
-repository and canonical URL advances the policy version. A revoked approval
-can be replaced by a newly reviewed version. Repository and source are UUIDv4.
-Phase 2 accepts one canonical HTTPS source per repository and an exact DNS
-hostname on port 443.
+documents read-only into the operator service. To update an existing approval
+for the same repository and canonical URL, register a higher policy version.
+A revoked approval can be replaced by a newly reviewed version.
 
 ~~~json
 {
@@ -21,7 +31,7 @@ hostname on port 443.
   "source": "11111111-2222-4333-8444-000000000011",
   "format": "sha256",
   "version": 1,
-  "url": "https://git.example.test/organization/repository.git",
+  "url": "https://git.example.test/team/manuals/repository.git",
   "hosts": ["git.example.test"],
   "required_refs": ["refs/heads/main"],
   "optional_refs": ["refs/tags/v1"],
@@ -44,10 +54,10 @@ unapproved default branch, or a noncommit root fails reconciliation. Annotated
 tags support up to 16 peel steps. Full-closure approval covers every Git object
 reachable under these refs, including the history and full tree.
 
-The optional Phase 4 `exploration` field records reviewed permission to
-return source metadata, paths, and bytes. Register a newer policy version and
-publish a generation verified under it to enable the private exploration
-interface. [Exploration approval and notice format](exploration.md#output-approval)
+The optional `exploration` field records reviewed permission to return source
+metadata, paths, and bytes. Search and history require their own opt-ins.
+Register a newer policy version and publish a generation verified under it to
+enable the private exploration interface. [Exploration approval and notice format](exploration.md#output-approval)
 
 ~~~sh
 docker compose --profile operator run --rm --no-deps migrate --migrate

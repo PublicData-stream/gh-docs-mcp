@@ -25,8 +25,8 @@ def run(*args, **kwargs):
     return subprocess.run(args, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=30, **kwargs).stdout
 
 
-def repo_path(root, fmt):
-    return root / "repositories" / f"{fmt}.git"
+def repo_path(root, fmt, namespace=""):
+    return root / "repositories" / namespace / f"{fmt}.git"
 
 
 def git(repo, *args, data=None):
@@ -42,23 +42,24 @@ def commit(repo, identity, *, parent=None, size=48):
     return value, blob.decode(), body
 
 
-def prepare(root):
+def prepare(root, *, host=HOST, namespace=""):
     root.mkdir(parents=True, exist_ok=True)
     certs = root / "tls"
     certs.mkdir()
     run("openssl", "req", "-new", "-x509", "-nodes", "-days", "2", "-newkey", "rsa:2048",
         "-subj", "/CN=Phase 2 synthetic CA", "-keyout", root / "ca.key", "-out", certs / "ca.crt")
-    run("openssl", "req", "-new", "-nodes", "-newkey", "rsa:2048", "-subj", f"/CN={HOST}",
+    run("openssl", "req", "-new", "-nodes", "-newkey", "rsa:2048", "-subj", f"/CN={host}",
         "-keyout", certs / "upstream.key", "-out", root / "upstream.csr")
     ext = root / "extensions"
-    ext.write_text(f"subjectAltName=DNS:{HOST}\nextendedKeyUsage=serverAuth\n")
+    ext.write_text(f"subjectAltName=DNS:{host}\nextendedKeyUsage=serverAuth\n")
     run("openssl", "x509", "-req", "-in", root / "upstream.csr", "-CA", certs / "ca.crt",
         "-CAkey", root / "ca.key", "-CAcreateserial", "-out", certs / "upstream.crt", "-days", "2", "-extfile", ext)
     for item in (root / "ca.key", root / "upstream.csr", ext, certs / "ca.srl"):
         item.unlink(missing_ok=True)
     (root / "mode").write_text("normal")
     for fmt in REPOS:
-        repo = repo_path(root, fmt)
+        repo = repo_path(root, fmt, namespace)
+        repo.parent.mkdir(parents=True, exist_ok=True)
         run("git", "init", "--bare", f"--object-format={fmt}", "--initial-branch=main", repo)
         initial, blob, raw = commit(repo, f"{fmt}-main", size=384 * 1024)
         optional, _, _ = commit(repo, f"{fmt}-optional")
@@ -74,11 +75,11 @@ def prepare(root):
 
 
 def approval(fmt, *, version=1, required=None, deadline=90, response_bytes=8 * 1024 * 1024,
-             source=None, repository=None, ref_base=None, pack_bytes=8 * 1024 * 1024):
+             source=None, repository=None, ref_base=None, pack_bytes=8 * 1024 * 1024, host=HOST):
     repo, source_id = REPOS[fmt]
     return {
         "repository": repository or repo, "source": source or source_id, "format": fmt, "version": version,
-        "url": f"https://{HOST}/{ref_base or fmt}.git", "hosts": [HOST],
+        "url": f"https://{host}/{ref_base or fmt}.git", "hosts": [host],
         "required_refs": required or ["refs/heads/main"], "optional_refs": ["refs/tags/v1"],
         "prefixes": ["refs/heads/approved/"], "reviewer": "Synthetic fixture",
         "reviewed_at": "2002-02-02T02:02:02Z", "full_closure_approved": True,
