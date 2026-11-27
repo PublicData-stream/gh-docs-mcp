@@ -76,12 +76,14 @@ def schema_and_grants(stack):
         "repository_id", "generation_id", "object_format", "commit_oid",
     }
     assert schema["$defs"]["Context"]["additionalProperties"] is False
-    assert phase2.sql(stack, """
+    grants = phase2.sql(stack, """
         SELECT has_table_privilege('gh_docs_serve', 'git_catalog.exploration_generations', 'SELECT'),
                has_table_privilege('gh_docs_serve', 'git_catalog.exploration_generations', 'UPDATE'),
                has_table_privilege('gh_docs_serve', 'git_catalog.source_approvals', 'SELECT'),
-               has_table_privilege('gh_docs_sync', 'git_catalog.exploration_generations', 'SELECT')
-    """) == "t|f|f|f"
+               has_table_privilege('gh_docs_sync', 'git_catalog.exploration_generations', 'SELECT'),
+               has_table_privilege('gh_docs_sync', 'git_catalog.exploration_generations', 'UPDATE')
+    """)
+    assert grants == "t|f|f|t|f", grants
 
 
 def migration(stack, repo, expected):
@@ -92,6 +94,7 @@ def migration(stack, repo, expected):
     assert phase2.sql(stack, "SELECT version FROM git_catalog.migrations ORDER BY version") == "2\n3\n4"
     stack.one_shot("migrate")
     stack.one_shot("migrate")
+    schema_and_grants(stack)
     assert call(stack, "repository.info", {"repository_id": repo}) == expected
 
 
