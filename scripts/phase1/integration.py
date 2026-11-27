@@ -26,7 +26,7 @@ import integration as phase0
 
 FIXTURE = ["docs-mcp-phase1-fixture"]
 ORACLE = "/phase1-oracle.json"
-CATALOG_VERSIONS = ["2", "3", "4", "5", "6", "7", "8"]
+CATALOG_VERSIONS = ["2", "3", "4", "5", "6", "7", "8", "9"]
 RUN = phase0.run
 DOCKER = phase0.DOCKER
 
