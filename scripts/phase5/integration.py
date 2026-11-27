@@ -25,7 +25,7 @@ spec = importlib.util.spec_from_file_location("phase4_integration", ROOT / "scri
 phase4 = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(phase4)
 phase2 = phase4.phase2
-from git_fixtures import NEW, OLD, PATH, PHRASE, policy, prepare
+from git_fixtures import GLOB_REF, GLOB_TEXT, NEW, OLD, PATH, PHRASE, glob_policy, policy, prepare
 from mcp_wire import VERSION, message
 from object_fixtures import decoded, encoded
 from smart_fixtures import REPOS, git, repo_path
@@ -114,6 +114,10 @@ class Wire:
 
 def publish(stack, config, endpoint, fmt, version=1, seq=0, enabled=True):
     phase2.register(stack, config, policy(fmt, version, enabled=enabled))
+    return publish_registered(stack, endpoint, fmt, seq)
+
+
+def publish_registered(stack, endpoint, fmt, seq):
     repo = REPOS[fmt][0]
     generation = int(phase2.fetch(stack, repo, endpoint)["generation"])
     phase4.prepare_publish(stack, repo, generation, seq)
@@ -136,7 +140,7 @@ def migration_and_legacy(wire, config, endpoint):
     assert phase2.sql(stack, "SELECT max(version) FROM git_catalog.migrations") == "5"
     stack.one_shot("migrate")
     stack.one_shot("migrate")
-    assert phase2.sql(stack, "SELECT max(version) FROM git_catalog.migrations") == "7"
+    assert phase2.sql(stack, "SELECT max(version) FROM git_catalog.migrations") == "8"
     assert wire.call("repository.info", {"repository_id": repo}) == before
     assert phase2.sql(stack, """SELECT has_table_privilege('gh_docs_serve',
         'git_catalog.exploration_generations', 'SELECT'),
@@ -144,6 +148,15 @@ def migration_and_legacy(wire, config, endpoint):
         has_table_privilege('gh_docs_serve','git_catalog.source_approvals','SELECT')""") == "t|f|f"
     publish(stack, config, endpoint, "sha1", version=2, seq=1)
     wire.call("git.log", {"context": old}, error="generation_unavailable")
+    phase2.restore_v7(stack)
+    assert phase2.sql(stack, "SELECT max(version) FROM git_catalog.migrations") == "7"
+    before = wire.call("repository.info", {"repository_id": repo})
+    rejected = phase2.register(stack, config, glob_policy("sha1", 3), expected=None)
+    assert rejected.returncode and "apply Git catalog migration 0008" in rejected.stdout
+    assert wire.call("repository.info", {"repository_id": repo}) == before
+    stack.one_shot("migrate")
+    stack.one_shot("migrate")
+    assert wire.call("repository.info", {"repository_id": repo}) == before
 
 
 def grep_oracle(stack):
@@ -335,6 +348,97 @@ def retirement(wire, upstream, endpoint, ctx, token):
     phase3.command(stack, repo, "--recover")
 
 
+def glob_approvals(wire, upstream, config, endpoint, fmt):
+    stack = wire.stack
+    repo, source = REPOS[fmt]
+    proof = json.loads((upstream / f"{fmt}-oracle.json").read_text())["glob"]
+    seq = int(phase2.sql(stack, "SELECT publication_sequence FROM git_catalog.active_generations "
+                               f"WHERE repository_id = '{repo}'"))
+    selected = glob_policy(fmt, version=3)
+    phase2.register(stack, config, selected)
+    generation = publish_registered(stack, endpoint, fmt, seq)
+    ctx = wire.resolve(repo, proof["head"], generation)
+    root = wire.call("git.ls_tree", {"context": ctx})["entries"]
+    assert [decoded(entry["path"]) for entry in root] == [b"LICENSE", b"docs"]
+    assert root[1]["navigation_only"] and "oid" not in root[1]
+    find = {"context": ctx, "pattern": {"kind": "glob", "value": encoded("**")}}
+    rows, cursor = [], None
+    for _ in range(4):
+        page = wire.call("git.find", {**find, "page": {"limit": 2, "cursor": cursor}})
+        rows.extend(page["entries"])
+        cursor = page["next_cursor"]
+        if cursor is None:
+            break
+    assert cursor is None and [decoded(row["path"]) for row in rows] == [
+        b"LICENSE", b"docs", b"docs/guide.md", b"docs/mode.md", b"docs/raw-\xff.md",
+        b"docs/setup", b"docs/setup/install.md",
+    ]
+    entries = {decoded(row["path"]): row for row in rows}
+    assert entries[b"docs/setup"]["navigation_only"] and "oid" not in entries[b"docs/setup"]
+    assert entries[b"docs/setup/install.md"]["mode"] == "100755"
+    assert entries[b"docs/setup/install.md"]["notice"] == "Reviewed Markdown"
+    assert entries[b"docs/guide.md"]["notice"] == "Reviewed guide"
+    for path in (b"docs/guide.md", b"docs/raw-\xff.md", b"docs/setup/install.md"):
+        data = wire.call("git.read", {"context": ctx, "path": encoded(path)})
+        assert data["data"].encode() == GLOB_TEXT and data["oid"] == entries[path]["oid"]
+    for path in ("docs/shared.txt", "docs/upper.MD", "docs/link.md", "docs/submodule.md", "hidden.md", "moved.md"):
+        wire.call("git.read", {"context": ctx, "path": encoded(path)}, error="object_unavailable")
+    wire.call("git.ls_tree", {"context": ctx, "root": encoded("docs/excluded")}, error="object_unavailable")
+    wire.call("git.rg", {"context": ctx, "root": encoded("docs/excluded"), "pattern": "needle"},
+              error="object_unavailable")
+    args = {"context": ctx, "pattern": "needle", "path_glob": encoded("**")}
+    hits = wire.call("git.rg", args)["matches"]
+    assert [decoded(hit["path"]) for hit in hits] == [b"docs/guide.md", b"docs/mode.md", b"docs/raw-\xff.md",
+                                                       b"docs/setup/install.md"]
+    assert len({hit["oid"] for hit in hits}) == 1
+    src = repo_path(upstream, fmt)
+    assert git(src, "rev-parse", f"{proof['head']}:docs/shared.txt").strip().decode() == hits[0]["oid"]
+    assert wire.call("git.rg", {**args, "path_glob": encoded("**/*.txt")})["matches"] == []
+    assert wire.call("git.find", {**find, "pattern": {"kind": "glob", "value": encoded("**/*.txt")}})["entries"] == []
+
+    hidden = wire.resolve(repo, proof["hidden"], generation)
+    assert wire.call("git.show", {"context": hidden})["entries"] == []
+    assert [entry["oid"] for entry in wire.call("git.log", {"context": ctx})["entries"]] == [
+        proof["head"], proof["base"],
+    ]
+    for tool, arguments in (("git.show", {"context": ctx}), ("git.diff", {"base": hidden, "head": ctx})):
+        changes = wire.call(tool, arguments)["entries"]
+        assert [(decoded(entry["path"]), entry["old"] is None, entry["new"] is None) for entry in changes] == [
+            (b"docs/mode.md", True, False), (b"docs/rename.md", False, True),
+        ]
+        explicit = wire.call(tool, {**arguments, "path": encoded("docs/mode.md")})["entries"]
+        assert len(explicit) == 1 and explicit[0]["old"] is None
+    blame = wire.call("git.blame", {"context": ctx, "path": encoded("docs/mode.md")})["entries"]
+    assert len(blame) == 1 and blame[0]["origin"]["commit"]["oid"] == proof["head"]
+    wire.call("git.blame", {"context": hidden, "path": encoded("docs/mode.md")}, error="object_unavailable")
+    wire.call("git.log", {"context": ctx, "path": encoded("moved.md")}, error="object_unavailable")
+    budget = wire.resolve(repo, proof["budget"], generation)
+    page = wire.call("git.ls_tree", {"context": budget})
+    assert page["entries"] == [] and page["coverage"]["reason"] == "narrow_scope"
+    wire.call("git.ls_tree", {"context": budget, "root": encoded("docs")}, error="budget_exceeded")
+
+    search_cursor = wire.call("git.rg", {**args, "page": {"limit": 1}})["next_cursor"]
+    assert search_cursor
+    continuation = {**args, "page": {"limit": 1, "cursor": search_cursor}}
+    git(src, "update-ref", GLOB_REF, proof["future"])
+    wire.call("git.resolve", {"repository_id": repo, "generation_id": str(generation),
+                              "selector": phase4.by_oid(proof["future"])}, error="object_unavailable")
+    next_generation = publish_registered(stack, endpoint, fmt, seq + 1)
+    future = wire.resolve(repo, proof["future"], next_generation)
+    read = wire.call("git.read", {"context": future, "path": encoded("docs/future.md")})
+    assert read["data"].encode() == GLOB_TEXT
+    assert wire.call("git.rg", continuation)["matches"]
+    selected["version"] = 4
+    selected["exploration"]["scope"]["grants"] = [{"glob": "docs/guide.md", "notice": "Reviewed guide only"}]
+    phase2.register(stack, config, selected)
+    wire.call("git.rg", continuation, error="generation_unavailable")
+    last = publish_registered(stack, endpoint, fmt, seq + 2)
+    narrowed = wire.resolve(repo, proof["future"], last)
+    wire.call("git.read", {"context": narrowed, "path": encoded("docs/future.md")}, error="object_unavailable")
+    stack.compose("run", "--rm", "--no-deps", "migrate", "--revoke-source", "--source", source)
+    wire.call("git.read", {"context": narrowed, "path": encoded("docs/guide.md")}, error="generation_unavailable")
+
+
 def sdk(wire, node, client_dir, repo, generation=None):
     with tempfile.NamedTemporaryFile(dir=client_dir, prefix="phase5-sdk-", suffix=".mjs", delete=False) as file:
         script = Path(file.name)
@@ -389,6 +493,9 @@ def main():
                           "page": {"limit": 1, "cursor": token}}, error="generation_unavailable")
                 wire.call("git.log", {"context": ctx}, error="generation_unavailable")
                 print("A14 revoked search cursor and history denied", flush=True)
+        for fmt in REPOS:
+            glob_approvals(wire, upstream, config, endpoint, fmt)
+            print(f"{fmt} glob approval navigation, reads, search, history and publication fences passed", flush=True)
     print("Phase 5 Compose qualification passed", flush=True)
 
 

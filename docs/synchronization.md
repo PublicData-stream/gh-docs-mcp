@@ -25,6 +25,12 @@ documents read-only into the operator service. To update an existing approval
 for the same repository and canonical URL, register a higher policy version.
 A revoked approval can be replaced by a newly reviewed version.
 
+To register [glob grants](exploration.md#output-approval), upgrade the roles,
+apply catalog migration `0008`, then register the higher source policy
+version with exploration approval version `3`. Publish a generation for the
+new policy to admit reads. Registering the new policy supersedes previous
+generations and their cursors.
+
 ~~~json
 {
   "repository": "11111111-2222-4333-8444-000000000001",

@@ -641,7 +641,9 @@ fn read_blob(
         verify_commit(snapshot, batch, commit)?;
         let commit_tree = batch.commit(commit)?.tree;
         let mut tree = Tree::new(batch, &meta.policy);
-        let (entry, notice) = tree.leaf(commit_tree, path)?;
+        let (entry, notice) = tree
+            .approved_leaf(commit_tree, path)?
+            .ok_or(Error::ObjectUnavailable)?;
         let (mode, kind) = tree::mode(&entry.mode);
         let mut base = json!({
             "context":request.context, "source":summary(meta, scope.sequence),

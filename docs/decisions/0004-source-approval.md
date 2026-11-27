@@ -16,6 +16,11 @@ author and committer email addresses alongside other history metadata. Path
 grants apply to each side of a diff and each attributed blame line.
 [Phase 5 approvals](../mcp.md#approve-output-forms)
 
+Version 3 accepts anchored path globs as standing grants for regular and
+executable files on the approved refs. Review the scope across historical and
+future matching files. A glob grants navigation through an ancestor when the
+selected commit contains an approved descendant. [Glob grants](../exploration.md#output-approval)
+
 During Phase 0, the owner identified `github/docs` and `refs/heads/main` as a
 candidate for review. It remains unapproved. Its documentation and code have
 separate license terms. [GitHub Docs upstream license summary](https://github.com/github/docs#license)

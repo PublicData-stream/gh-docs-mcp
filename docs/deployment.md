@@ -101,6 +101,13 @@ incompatible schema or failed store migration, provision fresh volumes and
 restore the matched pre-upgrade backup, previous images and proxy configuration. Reconcile
 revocations and credential changes made after the backup before reopening.
 
+Catalog migration `0008` adds exploration approval version 3. Roll back to
+older roles by restoring a verified schema 7 backup into fresh volumes.
+Before reopening ingress, revoke sources whose broader approvals were
+superseded after the backup. Restore access for those sources only after
+reviewing and publishing an equivalent or narrower policy supported by
+the older roles.
+
 ### Move from gh-docs-mcp to docs-mcp
 
 The `2.0.0` cutover reuses the existing Compose project and data. Keep the
@@ -129,11 +136,11 @@ four image digests for rollback.
    active generation and sequence. Check control delivery when enabled.
    Start the proxy on loopback and verify TLS, MCP discovery, and a known
    read before restoring client access.
-4. To roll back on the existing state, close ingress, quiesce the roles,
-   then stop PostgreSQL and repeat the startup checks with the saved old
-   Compose files, environment, and image digests. Use the verified backup
-   and the [restore procedure](publication.md#backup-and-restore) if the
-   existing state cannot be reopened.
+4. If migration `0008` has been applied, use the schema 7 restore procedure
+   before starting the older roles. For a compatible catalog, close ingress,
+   quiesce the roles, stop PostgreSQL, and repeat the startup checks with the
+   saved Compose files, environment, and image digests. Use the verified
+   backup if the existing state cannot be reopened. [Restore procedure](publication.md#backup-and-restore)
 
 The [cutover rehearsal](release-readiness.md#rehearse-the-rename) exercises
 both directions on a populated synthetic deployment.

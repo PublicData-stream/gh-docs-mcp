@@ -133,8 +133,17 @@ def configure_control(stack, services, tag, upstream, address):
                                        "target": CA, "read_only": True}]
 
 
+def restore_v7(stack):
+    """Rewind glob approval DDL in a disposable catalog with only legacy policies."""
+    assert sql(stack, "SELECT count(*) FROM git_catalog.source_approvals "
+                      "WHERE approval->'exploration'->'version' = '3'::jsonb") == "0"
+    previous = (ROOT / "migrations/0006_output_approval.sql").read_text().split("INSERT INTO")[0]
+    sql(stack, f"BEGIN; {previous} DELETE FROM git_catalog.migrations WHERE version = 8; COMMIT;")
+
+
 def restore_v6(stack):
     """Rewind the Phase 6 DDL in a disposable probe while keeping old data."""
+    restore_v7(stack)
     control = (ROOT / "migrations/0007_control_plane.sql").read_text()
     names = re.findall(r"^CREATE FUNCTION git_catalog\.(\w+)\(", control, re.MULTILINE)
     drops = "; ".join(f"DROP FUNCTION git_catalog.{name}" for name in names)
@@ -155,9 +164,10 @@ def sql(stack, statement):
                       "-d", "gh_docs", "-c", statement).stdout.strip()
 
 
-def register(stack, path, policy):
+def register(stack, path, policy, *, expected=0):
     path.write_text(json.dumps(policy))
-    return stack.compose("run", "--rm", "--no-deps", "migrate", "--register-source", "--approval-file", APPROVAL)
+    return stack.compose("run", "--rm", "--no-deps", "migrate", "--register-source", "--approval-file", APPROVAL,
+                         expected=expected)
 
 
 def fetch(stack, repository, endpoint, ca=CA, *, reason=None, env=(), binary="docs-mcp-phase2-fixture"):

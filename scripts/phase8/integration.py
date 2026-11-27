@@ -313,6 +313,7 @@ def rehearse(args, refs, work, version):
     bundle = work / "backup"
     with phase2.stack(args.fixture_tag, publication=True, fixture_setup=phase5.prepare,
                       serve_target="serve") as (source, upstream, config, endpoint):
+        phase2.restore_v7(source)
         records = choose_seed(source, upstream, config, endpoint)
         source.compose("stop", "proxy", "feed", "serve", "sync", "upstream")
         source_name = source.compose_command[source.compose_command.index("-p") + 1]
@@ -329,6 +330,7 @@ def rehearse(args, refs, work, version):
         captured = backup.backup(project, source.root / "store", bundle)
     assert not source.root.exists()
     digest = captured["manifest_sha256"]
+    assert backup.verify(bundle, digest)["catalog"]["schema"] == 7
     reject_damaged_backup(bundle, digest)
     with release_stack(args.fixture_tag, refs) as (target, project, table):
         restored = backup.restore(project, project.store(), bundle, digest)
@@ -347,6 +349,7 @@ def rehearse(args, refs, work, version):
         target.compose("run", "--rm", "--no-deps", "-T", "sync", "--recover", "--repository", repo, timeout=75)
         target.one_shot("migrate")
         target.one_shot("migrate")
+        assert phase2.sql(target, "SELECT max(version) FROM git_catalog.migrations") == "8"
         open_stack(target)
         wire = phase5.Wire(target)
         wire.validate_registry(host_rejection=(403, 404, 421))
@@ -401,8 +404,44 @@ def rehearse(args, refs, work, version):
         open_stack(target)
         check_readback(wire, records, rotate=True)
         print("PostgreSQL image upgrade reopened the previous runtime's data directory", flush=True)
-    return {"backup": captured, "restore": restored, "load": measured,
+    glob_backup = glob_restore(args, refs, work)
+    return {"backup": captured, "restore": restored, "load": measured, "glob_backup": glob_backup,
             "postgres_upgrade": "pass", "completed_utc": datetime.now(timezone.utc).isoformat()}
+
+
+def glob_restore(args, refs, work):
+    bundle = work / "glob-backup"
+    fmt = "sha256"
+    repo = phase5.REPOS[fmt][0]
+
+    def readback(stack, oid):
+        wire = phase5.Wire(stack)
+        wire.validate_registry(host_rejection=(403, 404, 421))
+        context = wire.resolve(repo, oid)
+        wire.call("git.read", {"context": context, "path": phase5.encoded("docs/shared.txt")},
+                  error="object_unavailable")
+        return wire.call("git.read", {"context": context, "path": phase5.encoded("docs/setup/install.md")})
+
+    with phase2.stack(args.fixture_tag, publication=True, fixture_setup=phase5.prepare,
+                      serve_target="serve") as (source, upstream, config, endpoint):
+        phase2.register(source, config, phase5.glob_policy(fmt))
+        phase5.publish_registered(source, endpoint, fmt, 0)
+        proof = json.loads((upstream / f"{fmt}-oracle.json").read_text())["glob"]
+        expected = readback(source, proof["head"])
+        assert expected["data"].encode() == phase5.GLOB_TEXT and expected["notice"] == "Reviewed Markdown"
+        source.compose("stop", "proxy", "feed", "serve", "sync", "upstream")
+        source_name = source.compose_command[source.compose_command.index("-p") + 1]
+        project = backup.Project(source_name, [BASE, source.root / "phase2.json"], source.context)
+        captured = backup.backup(project, source.root / "store", bundle)
+    digest = captured["manifest_sha256"]
+    assert backup.verify(bundle, digest)["catalog"]["schema"] == 8
+    with release_stack(args.fixture_tag, refs) as (target, project, _):
+        restored = backup.restore(project, project.store(), bundle, digest)
+        target.one_shot("migrate")
+        open_stack(target)
+        assert readback(target, proof["head"]) == expected
+    print("Schema 8 backup restored glob approval and path denials", flush=True)
+    return {"backup": captured, "restore": restored}
 
 
 def main():

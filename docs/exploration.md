@@ -36,13 +36,52 @@ source bytes and can contain up to 4 KiB of UTF-8 text.
 ~~~
 
 Use `{"kind":"whole","notice":"…"}` after reviewing the whole closure.
-Path scope accepts up to 64 disjoint grants. A subtree grant requires a tree
-at its anchor. An exact grant permits a regular or executable file, symlink,
-or gitlink at that path. An ancestor containing an approved descendant in
+Path scope accepts up to 64 grants. Exact and subtree paths must be disjoint.
+A subtree grant requires a tree at its anchor. An exact grant permits a
+regular or executable file, symlink, or gitlink at that path. An ancestor
+containing an approved descendant in
 the selected commit carries its directory name and metadata notice. Its
 tree OID appears only under a whole-closure or applicable subtree grant.
 Sources with acquisition-only approvals become discoverable after a
 reviewed grant is registered and a matching generation is published.
+
+Use exploration approval version `3` to add a repository-relative glob to
+`scope.grants`. This `exploration` example covers `docs/index.md`,
+`docs/setup/install.md`, and `LICENSE`.
+
+~~~json
+{
+  "version": 3,
+  "metadata_notice": "Reviewed repository and ref metadata",
+  "scope": {
+    "kind": "paths",
+    "grants": [
+      {"glob": "docs/**/*.md", "notice": "Reviewed Markdown documentation"},
+      {
+        "path": {"encoding": "utf8", "value": "LICENSE"},
+        "subtree": false,
+        "notice": "Reviewed license"
+      }
+    ]
+  },
+  "outputs": {"search": true, "history": false}
+}
+~~~
+
+Each glob is a case-sensitive UTF-8 string of up to 256 bytes with the same
+wildcards as `git.find`. Wildcards match raw Git path bytes, including names
+that require base64 in MCP results. The glob determines the file extensions
+in scope. A glob authorizes regular and executable files. Use an exact or
+subtree grant for reviewed symlinks or submodules. Exact and subtree notices
+take priority, followed by the first matching glob in declaration order.
+Duplicate globs and grants that mix `glob` with `path` or `subtree` are invalid.
+
+Glob grants are evaluated in the selected commit across listing, reading,
+search, and history. Review the pattern as a standing rule for the approved
+refs, including future matching files and retained history. A directory
+visible through a glob carries only its navigation name and the metadata
+notice after the reader finds an approved descendant. Caller filters can
+narrow the approved paths.
 
 Policy supersession and revocation invalidate access to previous policy
 versions, including retained generations. A read admitted under the shared

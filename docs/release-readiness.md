@@ -51,6 +51,8 @@ Build the current fixture images with `scripts/phase8/fixtures.sh "$tag" --curre
 Build the old roles from the last pre-rename source under the same unique
 local tag. The rehearsal uses the fixture Sync image to reach the synthetic
 upstream. Run from the repository root on the rootful Compose host.
+The rehearsal upgrades the populated schema 7 catalog to schema 8 and
+restores the verified schema 7 backup into fresh volumes for rollback.
 
 ```sh
 previous=$(mktemp -d /tmp/docs-mcp-previous.XXXXXXXX)

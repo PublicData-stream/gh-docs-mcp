@@ -176,7 +176,7 @@ def migration(stack, config, endpoint, repo):
     assert phase2.sql(stack, "SELECT max(version) FROM git_catalog.migrations") == "6"
     stack.one_shot("migrate")
     stack.one_shot("migrate")
-    assert phase2.sql(stack, "SELECT max(version) FROM git_catalog.migrations") == "7"
+    assert phase2.sql(stack, "SELECT max(version) FROM git_catalog.migrations") == "8"
     assert sequence(stack, repo) == 1 and event_at(stack, repo, 1) == first
     assert phase2.sql(stack, """SELECT
         has_table_privilege('gh_docs_serve','git_catalog.notification_outbox','SELECT'),

@@ -83,8 +83,8 @@ def resources(root, sync, upstream, postgres, serve=None, *, explore=False, wire
                  for role in ("admin", "serve", "migrate", "sync")}
     policies = {fmt: approval(fmt) for fmt in REPOS}
     if wire:
-        from git_fixtures import policy
-        policies = {fmt: policy(fmt) for fmt in REPOS}
+        from git_fixtures import glob_policy, policy
+        policies = {"sha1": policy("sha1"), "sha256": glob_policy("sha256")}
     elif explore:
         for policy in policies.values():
             policy["exploration"] = {"version": 1, "metadata_notice": "Synthetic metadata",
@@ -179,7 +179,9 @@ def resources(root, sync, upstream, postgres, serve=None, *, explore=False, wire
                            "object_format": fmt, "commit_oid": proof["head" if wire else "initial"]}
                 if wire:
                     from git_fixtures import PHRASE
-                    serve_command.extend(wire_commands(fmt, context, PHRASE))
+                    if fmt == "sha256":
+                        context["commit_oid"] = proof["glob"]["head"]
+                    serve_command.extend(wire_commands(fmt, context, PHRASE, glob=fmt == "sha256"))
                     continue
                 request = {"tool": "git.read", "arguments": {"context": context,
                     "path": {"encoding": "utf8", "value": "original.bin"},
@@ -217,18 +219,25 @@ def resources(root, sync, upstream, postgres, serve=None, *, explore=False, wire
     return {"apiVersion": "v1", "kind": "List", "items": [*objects, job]}
 
 
-def wire_commands(fmt, context, phrase):
+def wire_commands(fmt, context, phrase, *, glob=False):
     version = "2026-07-28"
     metadata = {
         "io.modelcontextprotocol/protocolVersion": version,
         "io.modelcontextprotocol/clientCapabilities": {},
     }
     commands = []
-    for name, args, expected in [
-        ("git.read", {"context": context, "path": {"encoding": "utf8", "value": "data/note"}}, phrase),
-        ("git.rg", {"context": context, "pattern": phrase, "literal": True}, '"returned_count":2'),
-        ("git.log", {"context": context}, '"returned_count":4'),
-    ]:
+    path = {"encoding": "utf8", "value": "docs/setup/install.md" if glob else "data/note"}
+    needle = "markdown fixture needle" if glob else phrase
+    probes = [
+        ("git.read", {"context": context, "path": path}, needle, False),
+        ("git.rg", {"context": context, "pattern": needle, "literal": True},
+         '"returned_count":4' if glob else '"returned_count":2', False),
+        ("git.log", {"context": context}, '"returned_count":2' if glob else '"returned_count":4', False),
+    ]
+    if glob:
+        excluded = {"encoding": "utf8", "value": "docs/shared.txt"}
+        probes.append(("git.read", {"context": context, "path": excluded}, '"code":"object_unavailable"', True))
+    for name, args, expected, error in probes:
         request = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/call",
                               "params": {"name": name, "arguments": args, "_meta": metadata}})
         headers = ["Content-Type: application/json", "Accept: application/json, text/event-stream",
@@ -238,8 +247,9 @@ def wire_commands(fmt, context, phrase):
             command.extend(["--header", header])
         command.append("http://127.0.0.1:8080/mcp")
         commands.append(f"""result=$({shlex.join(command)}); printf '%s' "$result" | grep -qF {shlex.quote(expected)}""")
-        commands.append("""printf '%s' "$result" | grep -qF '"isError":false'""")
-    commands.append(f"echo 'Phase 5 {fmt} search and history passed'")
+        commands.append(f"""printf '%s' "$result" | grep -qF '"isError":{str(error).lower()}'""")
+    scope = "glob approval" if glob else "legacy approval"
+    commands.append(f"echo 'Phase 5 {fmt} {scope} reads, search and history passed'")
     return commands
 
 

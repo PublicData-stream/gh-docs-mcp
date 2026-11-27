@@ -4,7 +4,7 @@ use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{DateTime, Utc};
 use docs_mcp_core::{
     Result,
-    exploration::ExplorationApproval,
+    exploration::{ExplorationApproval, GLOB_APPROVAL_VERSION},
     git::{ObjectFormat, RefName, RepositoryId},
 };
 use serde::{Deserialize, Serialize};
@@ -233,6 +233,24 @@ pub async fn register(client: &Client, file: &Path) -> Result<()> {
     }
     let approval: Approval = serde_json::from_slice(&bytes)?;
     let (repo, source, format) = approval.validate()?;
+    if approval
+        .exploration
+        .as_ref()
+        .is_some_and(|exploration| exploration.version == GLOB_APPROVAL_VERSION)
+    {
+        let migrated: bool = client
+            .query_one(
+                "SELECT EXISTS (SELECT FROM git_catalog.migrations WHERE version = 8)",
+                &[],
+            )
+            .await?
+            .get(0);
+        if !migrated {
+            return Err(
+                "apply Git catalog migration 0008 before registering glob approvals".into(),
+            );
+        }
+    }
     let exact: Vec<_> = approval
         .required_refs
         .iter()

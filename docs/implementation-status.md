@@ -1078,3 +1078,41 @@ removed.
 
 The local fixture containers, networks, image tags, firewall tables, and
 SDK fixture were removed. These results cover the local synthetic profiles.
+
+## Per-source glob approvals
+
+On 2026-11-27, the glob approval change based on `1129a4e35989` passed the
+offline Rust 1.100.0 gate. The new unit tests cover approval validation,
+literal-grant precedence, raw byte matching, and recursive descendant
+pruning. Phase 0 Compose passed on Linux amd64 with kernel `7.0.0-44-generic`,
+rootful Docker `29.10.1`, Compose `5.8.0`, and ext4-backed `/tmp`. The wire
+probe used Node `26.13.1` and pnpm `12.23.0`.
+
+Phase 5 Compose passed for both SHA-1 and SHA-256 through the normal MCP
+endpoint. The gate covered navigation without tree OIDs, hidden paths that
+share an allowed blob, executable and non-UTF-8 Markdown files, hidden
+symlinks and submodules, and per-side approval in history. It also verified
+bounded traversal, pagination, newly published matches, and policy changes.
+A populated schema 7 catalog rejected glob registration until migration
+`0008` completed and kept the existing version 2 read behavior.
+
+The Phase 5 Restricted smoke passed with Minikube `1.39.0`, Kubernetes
+`1.37.0`, and rootless Docker with containerd. The SHA-1 fixture retained
+its version 2 behavior. The SHA-256 fixture verified the allowed and
+excluded reads, search, and history under a version 3 policy. The harness
+deleted its disposable profile and temporary directory.
+
+The populated cutover rehearsal upgraded a schema 7 catalog to schema 8
+while preserving published reads and cursors. The older migrator rejected
+schema 8. Restoring the verified schema 7 backup into fresh volumes let
+the older roles read the original generations and resume an existing cursor.
+The Phase 8 restore harness ran with locally built development images and
+the pinned OxiBelt edge. An independent schema 8 restore preserved the
+version 3 approval, its notice, exact file bytes, and denial of excluded
+paths.
+
+Local rootful Compose Phases 0–7 passed. The first Phase 6 run failed at
+the injected post-publication exit check. A full replay observed the
+expected exit status `137`, recovered publication and notification, and
+passed the remaining checks. The disposable Compose resources, firewall
+tables, image tags, SDK fixture, and temporary test directories were removed.

@@ -46,11 +46,15 @@ def quiesce(stack):
     stack.compose("stop", "sync", "serve")
 
 
-def switch(stack, configuration):
+def start_postgres(stack, configuration):
     stack.compose("stop", "postgres")
     stack.compose_command, stack.context = configuration
     up = ("up", "-d", "--no-build", "--pull", "never")
     stack.compose(*up, "--wait", "--wait-timeout", "130", "postgres", timeout=145)
+
+
+def start_roles(stack):
+    up = ("up", "-d", "--no-build", "--pull", "never")
     stack.compose("run", "--rm", "--no-deps", "migrate", "--migrate")
     stack.compose(*up, "serve", "sync", "feed", timeout=90)
     for role in ("serve", "sync", "feed"):
@@ -59,6 +63,22 @@ def switch(stack, configuration):
             expected=None,
         ).returncode == 0, f"{role} did not become ready", seconds=25)
     stack.compose(*up, "proxy")
+
+
+def restore_previous(stack, configuration, project, bundle, digest):
+    stack.compose_command, stack.context = configuration
+    refused = stack.compose("run", "--rm", "--no-deps", "migrate", "--migrate", expected=None)
+    assert refused.returncode and "unsupported Git catalog migration version" in refused.stdout
+    stack.compose("stop", "postgres")
+    # Preserve the upgraded volumes until the disposable rehearsal exits.
+    for name in ("store", "staging", "pgdata"):
+        volume = stack.root / name
+        volume.rename(stack.root / f"upgraded-{name}")
+        volume.mkdir()
+    stack.compose("run", "--rm", "--no-deps", "volume-admin")
+    start_postgres(stack, configuration)
+    backup.restore(project, project.store(), bundle, digest)
+    start_roles(stack)
 
 
 def publish(stack, repo, generation, sequence, *, sync="docs-mcp-sync"):
@@ -125,11 +145,13 @@ def rehearse(tag, source):
         captured = backup.backup(project, project.store(), bundle)
         catalog = backup.verify(bundle, captured["manifest_sha256"])["catalog"]
         canonical = backup.inventory(stack.root / "store")
-        switch(stack, current)
+        assert catalog["schema"] == 7
+        start_postgres(stack, current)
+        start_roles(stack)
 
         new = phase5.Wire(stack)
         new.validate_registry()
-        assert json.loads(phase2.sql(stack, backup.CATALOG)) == catalog
+        assert json.loads(phase2.sql(stack, backup.CATALOG)) == {**catalog, "schema": 8}
         assert backup.inventory(stack.root / "store") == canonical
         for repository, (raw, expected) in records.items():
             assert read(new, repository, raw) == expected
@@ -146,17 +168,14 @@ def rehearse(tag, source):
         publish(stack, repo, candidate["generation"], 1)
         current_read = read(new, repo, raw)
         assert current_read[0]["commit_oid"] == head
-        current_catalog = json.loads(phase2.sql(stack, backup.CATALOG))
-
         quiesce(stack)
-        switch(stack, previous)
+        restore_previous(stack, previous, project, bundle, captured["manifest_sha256"])
         old.validate_registry(legacy=True)
-        assert json.loads(phase2.sql(stack, backup.CATALOG)) == current_catalog
-        assert read(old, repo, raw) == current_read
-        other = phase2.REPOS["sha256"][0]
-        assert read(old, other, records[other][0]) == records[other][1]
+        assert json.loads(phase2.sql(stack, backup.CATALOG)) == catalog
+        for repository, (raw, expected) in records.items():
+            assert read(old, repository, raw) == expected
         assert next_refs(old, cursor_args, new_cursor) == expected_refs
-        print("Populated docs-mcp cutover and rollback passed", flush=True)
+        print("Populated docs-mcp cutover to schema 8 and schema 7 backup rollback passed", flush=True)
 
 
 if __name__ == "__main__":

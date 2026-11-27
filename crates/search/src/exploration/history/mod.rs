@@ -117,7 +117,7 @@ impl Explorer {
                 }
                 if path
                     .as_ref()
-                    .is_some_and(|path| meta.policy.scope.notice(path, false).is_none())
+                    .is_some_and(|path| !meta.policy.scope.allows_leaf_path(path))
                 {
                     return Err(Error::ObjectUnavailable);
                 }
@@ -240,7 +240,8 @@ impl History<'_, '_> {
             }
             self.examined += 1;
             let (links, raw) = self.tree.batch().commit_bytes(oid)?;
-            let projected = path.is_some() || matches!(self.policy.scope, ApprovedScope::Paths(_));
+            let projected =
+                path.is_some() || matches!(self.policy.scope, ApprovedScope::Paths { .. });
             let visible = if projected {
                 let previous = links
                     .parents
@@ -274,10 +275,10 @@ impl History<'_, '_> {
     }
 
     fn approved_leaf(&mut self, tree: Oid, path: &[u8]) -> Result<Option<File>, Error> {
-        let entry = self.tree.lookup(tree, path)?;
-        Ok(entry
-            .filter(|entry| entry.mode != TreeMode::Directory)
-            .map(File::from))
+        Ok(self
+            .tree
+            .approved_leaf(tree, path)?
+            .map(|(entry, _)| File::from(entry)))
     }
 
     fn project(
@@ -330,11 +331,8 @@ impl History<'_, '_> {
                 continue;
             }
             self.examined += 1;
-            let notice = self
-                .policy
-                .scope
-                .notice(path, false)
-                .ok_or(Error::Internal)?;
+            let mode = &new.or(old).ok_or(Error::Internal)?.mode;
+            let notice = self.tree.notice(path, mode).ok_or(Error::Internal)?;
             let base = json!({
                 "path":BytePath::encode(path).map_err(|_| Error::UnsupportedEncoding)?,
                 "notice":notice, "old":self.file_metadata(old)?, "new":self.file_metadata(new)?,
@@ -464,12 +462,13 @@ impl History<'_, '_> {
 
     fn blame(&mut self, commit: Oid, path: &[u8], range: Option<ByteRange>) -> Result<(), Error> {
         let (mut links, mut raw_commit) = self.tree.batch().commit_bytes(commit)?;
-        let Some(mut file) = self
-            .approved_leaf(links.tree, path)?
-            .filter(File::text_mode)
-        else {
+        let Some((entry, notice)) = self.tree.approved_leaf(links.tree, path)? else {
             return Err(Error::ObjectUnavailable);
         };
+        let mut file = File::from(entry);
+        if !file.text_mode() {
+            return Err(Error::ObjectUnavailable);
+        }
         let initial_oid = file.oid.to_string();
         let blob = self.tree.blob(file.oid)?;
         if blob.contains(&0) {
@@ -543,11 +542,6 @@ impl History<'_, '_> {
                 prior_ranges = Some(ranges);
             }
         }
-        let notice = self
-            .policy
-            .scope
-            .notice(path, false)
-            .ok_or(Error::Internal)?;
         for (line, origin) in target.zip(origins) {
             let content = excerpt(&blob, &initial_lines, line..line + 1);
             if origin.is_null() || content["truncated"] == true {

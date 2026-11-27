@@ -25,6 +25,10 @@ new reviewed source policy version with a version 2 exploration approval to
 enable search or history. Each permission defaults to false. Publish a
 generation matching the reviewed version before using it.
 
+Exploration approval version 3 uses the same output permissions and adds
+path patterns such as `docs/**/*.md`. The path grant applies when the
+client omits `path_glob` or uses a broad filter. [Glob grants](exploration.md#output-approval)
+
 ~~~json
 {
   "version": 2,
@@ -108,6 +112,8 @@ The Phase 5 Compose probe requires Python `jsonschema` in addition to the
 [Phase 0 prerequisites](deployment-prerequisites.md). Run it against the
 normal serve image. The supplemental Minikube smoke runs the normal serve image over pod loopback
 after publishing both synthetic repositories.
+The SHA-256 fixture exercises an allowed Markdown read and an excluded read
+under a version 3 approval.
 
 ~~~sh
 export CARGO_TARGET_DIR=/tmp/rust/target

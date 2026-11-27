@@ -42,6 +42,7 @@ SELECT coalesce(jsonb_agg(jsonb_build_array(repository_id, scope, generation_id,
     generation_id), '[]') FROM git_catalog.lock_keys
 """
 SQL = ["psql", "-XqAt", "-v", "ON_ERROR_STOP=1", "-U", "postgres", "-d", "gh_docs"]
+SUPPORTED_SCHEMAS = (7, 8)
 
 
 def sha256(path):
@@ -120,7 +121,7 @@ def verify(bundle, expected):
     if sha256(manifest) != expected:
         raise ValueError("backup manifest digest mismatch")
     record = json.loads(manifest.read_text())
-    if record["version"] != 1 or record["catalog"]["schema"] != 7:
+    if record["version"] != 1 or record["catalog"]["schema"] not in SUPPORTED_SCHEMAS:
         raise ValueError("unsupported backup version or catalog schema")
     if sha256(dump) != record["dump_sha256"] or inventory(bundle / "store") != record["store"]:
         raise ValueError("backup does not match the verified inventory")
@@ -230,7 +231,9 @@ def backup(project, store, bundle):
     with ExitStack() as handles, project.session() as connection:
         freeze(connection, handles, store)
         catalog = json.loads(query(connection, CATALOG))
-        if catalog["schema"] != 7 or catalog["unsettled"]:
+        if catalog["schema"] not in SUPPORTED_SCHEMAS:
+            raise ValueError("unsupported catalog schema for backup")
+        if catalog["unsettled"]:
             raise ValueError("settle publication work and private candidates before backup")
         project.assert_offline()
         bundle.mkdir(mode=0o700)
