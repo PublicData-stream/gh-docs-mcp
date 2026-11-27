@@ -13,7 +13,11 @@ import tomllib
 ROOT = Path(__file__).resolve().parents[2]
 SENTINEL = "0.0.0"
 NUMBER = r"(?:0|[1-9][0-9]*)"
-VERSION = re.compile(rf"(?P<base>{NUMBER}\.{NUMBER}\.{NUMBER})(?:-(?P<kind>beta|rc)\.[1-9][0-9]*)?")
+SHA = re.compile(r"[0-9a-f]{40}")
+VERSION = re.compile(
+    rf"(?P<base>{NUMBER}\.{NUMBER}\.{NUMBER})"
+    r"(?:-(?:(?P<kind>beta|rc)\.[1-9][0-9]*|build\.(?P<build_sha>[0-9a-f]{8})))?"
+)
 CANDIDATE_VERSION = f"{SENTINEL}-rc.1"
 CARGO_INPUTS = ("Cargo.toml", "Cargo.lock")
 PRODUCTION = {
@@ -35,10 +39,13 @@ def require(condition, message):
         raise ValueError(message)
 
 
-def parse_version(version):
+def parse_version(version, *, revision=None):
     match = VERSION.fullmatch(version) if len(version) <= 128 else None
-    require(match, "expected a stable X.Y.Z, beta X.Y.Z-beta.N or candidate X.Y.Z-rc.N version")
+    require(match, "expected X.Y.Z, X.Y.Z-beta.N, X.Y.Z-rc.N or X.Y.Z-build.<sha8>")
     require(version != SENTINEL, f"{SENTINEL} is reserved for development builds")
+    if revision is not None and match["build_sha"] is not None:
+        require(SHA.fullmatch(revision) and match["build_sha"] == revision[:8],
+                "build tag suffix does not match the source revision")
     return match
 
 
@@ -70,7 +77,11 @@ def replace_version(block, version, name):
 
 
 def stamped_inputs(read, version):
-    parse_version(version)
+    match = parse_version(version)
+    build_sha = match["build_sha"]
+    if build_sha and build_sha.startswith("0") and build_sha.isdigit():
+        # SemVer permits leading zeros in build metadata.
+        version = f"{match['base']}-build+{build_sha}"
     manifest, lock, packages = check_workspace(read)
     workspace = WORKSPACE_PACKAGE.search(manifest)
     require(workspace, "expected a [workspace.package] table in Cargo.toml")
@@ -85,7 +96,8 @@ def stamped_inputs(read, version):
 
 
 def stage_source(revision, version, work):
-    require(re.fullmatch(r"[0-9a-f]{40}", revision), "expected a full Git source revision")
+    require(SHA.fullmatch(revision), "expected a full Git source revision")
+    parse_version(version, revision=revision)
     source = work / "source"
     source.mkdir()
     archive = work / "source.tar"

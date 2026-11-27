@@ -11,13 +11,12 @@ import subprocess
 import sys
 import tempfile
 
-from release_version import check_workspace, parse_version, require, stage_source
+from release_version import SHA, check_workspace, parse_version, require, stage_source
 
 
 REPOSITORY = "PublicData-stream/docs-mcp"
 CI_PATH = ".github/workflows/ci.yml"
 CI_JOB = "rust"
-SHA = re.compile(r"[0-9a-f]{40}")
 
 
 def git(*args):
@@ -31,13 +30,22 @@ def api(endpoint, *, paginate=False):
     return json.loads(subprocess.check_output([*command, f"repos/{REPOSITORY}/{endpoint}"]))
 
 
-def release_tag(version):
-    match = parse_version(version)
-    require(match["kind"] != "rc", "expected a stable X.Y.Z or beta X.Y.Z-beta.N release tag")
+def release_tag(version, *, revision=None):
+    match = parse_version(version, revision=revision)
+    require(match["kind"] != "rc", "expected a stable, beta, or build publication tag")
+    if match["build_sha"] is not None:
+        return match["base"], "build"
     return match["base"], match["kind"] or "stable"
 
 
-def verify_event(event_name, event, version, kind):
+def verify_event(event_name, event, version, kind, *, revision, tag_object):
+    if kind == "build":
+        require(event_name == "push" and event.get("ref") == f"refs/tags/{version}"
+                and event.get("created") is True and event.get("deleted") is False
+                and event.get("forced") is False and event.get("before") == "0" * 40
+                and event.get("after") in (tag_object, revision),
+                "expected creation of the matching build tag")
+        return
     release = event.get("release", {})
     require(event_name == "release" and event.get("action") == "published"
             and release.get("tag_name") == version and release.get("draft") is False
@@ -54,6 +62,12 @@ def verify_tag(version, revision, tag_object):
     require(tag["sha"] == tag_object and tag["tag"] == version
             and tag["object"]["type"] == "commit" and tag["object"]["sha"] == revision
             and tag["verification"]["verified"] is True, "GitHub did not verify the signed release tag")
+
+
+def verify_local_tag(version, revision, tag_object):
+    target = git("-c", "gpg.ssh.program=false", "-c", "gpg.x509.program=false",
+                 "verify-tag", "--format=%(object) %(type) %(tag)", tag_object)
+    require(target == f"{revision} commit {version}", "local signed tag does not name the expected commit")
 
 
 def canonical_run(run, revision):
@@ -94,19 +108,21 @@ def verify_ci(revision):
     print(f"Accepted Rust CI: {run['html_url']} (attempt {attempt})")
 
 
-def verify_source(version, revision, tag_object):
+def verify_source(version, revision, tag_object, *, local_tag=False):
+    release_tag(version, revision=revision)
     git("merge-base", "--is-ancestor", revision, "refs/remotes/origin/main")
     check_workspace(lambda name: git("show", f"{revision}:{name}"))
-    verify_tag(version, revision, tag_object)
+    verify = verify_local_tag if local_tag else verify_tag
+    verify(version, revision, tag_object)
     verify_ci(revision)
 
 
 def preflight(version):
-    release_tag(version)
+    _, kind = release_tag(version)
     ref = f"refs/tags/{version}"
     tag_object = git("rev-parse", "--verify", ref)
     revision = git("rev-parse", "--verify", f"{ref}^{{commit}}")
-    verify_source(version, revision, tag_object)
+    verify_source(version, revision, tag_object, local_tag=kind == "build")
     with tempfile.TemporaryDirectory(prefix="docsmcp8-preflight-", dir="/tmp") as directory:
         stage_source(revision, version, Path(directory))
     print(f"Release preflight passed for {version} at {revision}")
@@ -117,13 +133,13 @@ def main():
     if len(args) == 2 and args[0] == "preflight":
         preflight(args[1])
         return
-    require(not args or args == ["recheck"], "expected no arguments, recheck, or preflight X.Y.Z")
+    require(not args or args == ["recheck"], "expected no arguments, recheck, or preflight TAG")
     require(os.environ["GITHUB_REPOSITORY"] == REPOSITORY, "unexpected release repository")
     ref = os.environ["GITHUB_REF"]
     require(ref.startswith("refs/tags/"), "release source must be a tag")
     version = ref.removeprefix("refs/tags/")
-    _, kind = release_tag(version)
     revision = git("rev-parse", "HEAD")
+    _, kind = release_tag(version, revision=revision)
     if args == ["recheck"]:
         require(version == os.environ["RELEASE_VERSION"] and revision == os.environ["RELEASE_REVISION"],
                 "publication checkout differs from the verified source")
@@ -131,11 +147,11 @@ def main():
         require(SHA.fullmatch(tag_object), "invalid release tag object")
         verify_tag(version, revision, tag_object)
         return
-    event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_bytes())
-    verify_event(os.environ["GITHUB_EVENT_NAME"], event, version, kind)
     tag_object = git("rev-parse", "--verify", ref)
     require(os.environ["GITHUB_SHA"] in {tag_object, revision}
             and git("rev-parse", f"{ref}^{{commit}}") == revision, "tag, event, and checkout differ")
+    event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_bytes())
+    verify_event(os.environ["GITHUB_EVENT_NAME"], event, version, kind, revision=revision, tag_object=tag_object)
     verify_source(version, revision, tag_object)
     with Path(os.environ["GITHUB_OUTPUT"]).open("a") as output:
         print(f"version={version}\nrevision={revision}\nkind={kind}\ntag_object={tag_object}", file=output)

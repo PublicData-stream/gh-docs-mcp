@@ -232,7 +232,8 @@ def main():
             action.add_argument("--bundle", required=True, type=Path)
     args = parser.parse_args()
     require(SHA.fullmatch(args.revision), "invalid release revision")
-    release_tag(args.version)
+    _, kind = release_tag(args.version, revision=args.revision)
+    require(args.command != "promote-latest" or kind == "stable", "expected a stable OCI version")
     namespace = NAMESPACE
     if args.loopback_registry:
         require(re.fullmatch(r"127\.0\.0\.1:[0-9]{1,5}", args.loopback_registry), "expected a loopback registry")

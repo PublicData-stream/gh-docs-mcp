@@ -3,7 +3,7 @@
 The [release-candidate workflow](../.github/workflows/release-candidate.yml)
 can be run manually to produce a read-only qualification bundle. The
 [publishing workflow](../.github/workflows/publish-images.yml) calls the
-same native amd64 and arm64 jobs at the signed release commit. Both jobs
+same native amd64 and arm64 jobs at the signed tag's commit. Both jobs
 must pass the repeat build, Compose probes, restore rehearsal, and the full
 Phase 8 audit before assembly. Each role has one OCI index containing both
 runnable platform manifests and their attached SPDX SBOM and SLSA provenance.
@@ -22,10 +22,12 @@ entries at `0.0.0`. Production packages inherit the workspace version and
 the test-support package declares `0.0.0` explicitly. Unstamped builds
 report `0.0.0-dev.archive` over MCP.
 
-The native image build applies the full release tag in a disposable archive
+The native image build applies the full publishing tag in a disposable archive
 of the verified commit. It changes the root Cargo workspace version and
-the production package entries in the copy of `Cargo.lock`. The MCP server,
-OCI labels, and build receipt use the same version. Audit evidence records
+the production package entries in the copy of `Cargo.lock`. A build tag with
+an all-digit SHA prefix that starts with zero uses `X.Y.Z-build+<sha8>` in
+Cargo to satisfy SemVer. The MCP server, OCI labels, and build receipt use
+the original tag in all cases. Audit evidence records
 the stamped files and verifies their hashes against the native build receipt.
 To rebuild, pass the same revision and full version to
 `scripts/phase8/images.py build`. Manual qualification defaults to
@@ -47,8 +49,31 @@ To rebuild, pass the same revision and full version to
    the exact signed tag, canonical `main` CI, and version stamping.
 4. Publish a GitHub Release for that existing tag. Mark beta releases as
    prereleases. Publishing the release authorizes the workflow to write the
-   versioned indexes after qualification. A tag push or a draft release
-   alone does not start publication.
+   stable or beta indexes after qualification.
+
+## Publish a build tag
+
+1. Complete the same release readiness review. Select a commit containing
+   the build-tag workflow whose newest exact-commit `main` push CI run
+   passed, and refresh `origin/main`.
+2. Create a new GPG-signed annotated tag using the first eight lowercase
+   hex characters of the full commit SHA. Run preflight before pushing.
+
+   ~~~sh
+   revision=$(git rev-parse --verify 'HEAD^{commit}')
+   tag="2.0.0-build.$(printf '%.8s' "$revision")"
+   git tag -s "$tag" "$revision" -m "$tag"
+   python3 -B scripts/phase8/release_source.py preflight "$tag"
+   git push origin "refs/tags/$tag"
+   ~~~
+
+3. Creating the remote tag authorizes the same public GHCR publication
+   and anonymous verification as a release. The workflow checks GitHub's
+   verification of the annotated tag and uses the exact build tag on all
+   four indexes. If the source gate fails because CI is pending, rerun the
+   failed jobs after CI passes. Push each build tag individually.
+
+## Verify public package access
 
 The workflow links the four packages to this repository through their OCI
 source label. New packages start private. A package admin makes each
@@ -65,7 +90,7 @@ attestations with an empty credential file. A stable release also sets
 | `docs-mcp-feed` | `DOCS_MCP_FEED_IMAGE` |
 | `docs-mcp-postgres` | `DOCS_MCP_POSTGRES_IMAGE` |
 
-The first planned release under these package names is `2.0.0`. Existing
+The first planned stable release under these package names is `2.0.0`. Existing
 release tags and the `gh-docs-mcp-*` package references remain part of their
 original release lineage. Retain the previous digest-pinned references for
 the [deployment cutover](deployment.md#upgrade-and-rollback).
@@ -86,7 +111,8 @@ If source verification or qualification requires a change to a published
 immutable release's source, use a new eligible version for the corrected
 commit and run preflight before publishing.
 
-Rerun failed jobs while the original qualified bundle is still available.
+For releases and build tags, rerun failed jobs while the original qualified
+bundle is still available.
 This reuses the exact artifact ID. Each version tag is accepted only if
 its digest already matches, and only missing version tags are written.
 Treat the signed Git tag and each GHCR version tag as fixed. If the original

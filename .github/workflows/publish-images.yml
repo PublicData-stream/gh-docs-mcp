@@ -3,6 +3,9 @@ name: Publish Docs MCP images
 on:
   release:
     types: [published]
+  push:
+    tags:
+      - '*.*.*-build.*'
 
 permissions: {}
 
@@ -37,7 +40,7 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Verify the release
+      - name: Verify the publishing event
         id: source
         env:
           GH_TOKEN: ${{ github.token }}

@@ -75,12 +75,16 @@ impl Rate {
     }
 }
 
+fn server_version(package_version: &str) -> String {
+    match package_version {
+        "0.0.0" => "0.0.0-dev.archive".to_owned(),
+        // Cargo stores an all-digit SHA with leading zeros as SemVer metadata.
+        version => version.replace("-build+", "-build."),
+    }
+}
+
 fn identity() -> Implementation {
-    let version = match env!("CARGO_PKG_VERSION") {
-        "0.0.0" => "0.0.0-dev.archive",
-        version => version,
-    };
-    Implementation::new("docs-mcp", version)
+    Implementation::new("docs-mcp", server_version(env!("CARGO_PKG_VERSION")))
 }
 
 fn response_meta() -> MetaObject {
@@ -556,6 +560,20 @@ fn rpc_error(status: StatusCode, id: &Value, error: ErrorData) -> Response {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn build_tag_retains_leading_zeros_in_mcp_version() {
+        assert_eq!(
+            server_version("2.0.0-build+01234567"),
+            "2.0.0-build.01234567"
+        );
+        assert_eq!(
+            server_version("2.0.0-build.0abc1234"),
+            "2.0.0-build.0abc1234"
+        );
+        assert_eq!(server_version("2.0.0-beta.1"), "2.0.0-beta.1");
+        assert_eq!(server_version("0.0.0"), "0.0.0-dev.archive");
+    }
 
     #[test]
     fn production_registry_matches_exported_schema() {

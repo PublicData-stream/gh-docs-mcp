@@ -21,6 +21,9 @@ import release_version as cargo_version
 REVISION = "a" * 40
 TAG_OBJECT = "b" * 40
 VERSION = "0.9.0"
+BUILD_VERSION = f"{VERSION}-build.{REVISION[:8]}"
+VERIFY_LOCAL_TAG = ("-c", "gpg.ssh.program=false", "-c", "gpg.x509.program=false",
+                    "verify-tag", "--format=%(object) %(type) %(tag)", TAG_OBJECT)
 
 
 def workspace_file(name):
@@ -30,9 +33,16 @@ def workspace_file(name):
 class CargoVersionTests(unittest.TestCase):
     def test_stamp_changes_only_production_versions(self):
         committed = {name: tomllib.loads(workspace_file(name)) for name in cargo_version.CARGO_INPUTS}
-        for version in ("1.0.2", "1.0.2-beta.1", cargo_version.CANDIDATE_VERSION):
-            with self.subTest(version=version):
-                stamped = cargo_version.stamped_inputs(workspace_file, version)
+        for tag, version in (
+            ("1.0.2", "1.0.2"),
+            ("1.0.2-beta.1", "1.0.2-beta.1"),
+            (cargo_version.CANDIDATE_VERSION, cargo_version.CANDIDATE_VERSION),
+            (BUILD_VERSION, BUILD_VERSION),
+            (f"{VERSION}-build.01234567", f"{VERSION}-build+01234567"),
+            (f"{VERSION}-build.12345678", f"{VERSION}-build.12345678"),
+        ):
+            with self.subTest(tag=tag):
+                stamped = cargo_version.stamped_inputs(workspace_file, tag)
                 expected = {name: tomllib.loads(workspace_file(name)) for name in stamped}
                 expected["Cargo.toml"]["workspace"]["package"]["version"] = version
                 for package in expected["Cargo.lock"]["package"]:
@@ -58,35 +68,97 @@ class CargoVersionTests(unittest.TestCase):
 
 
 class SourceTests(unittest.TestCase):
+    @staticmethod
+    def git_for_tag(version):
+        ref = f"refs/tags/{version}"
+
+        def git(*args):
+            if args == ("rev-parse", "HEAD") or args[-1] == f"{ref}^{{commit}}":
+                return REVISION
+            if args == ("rev-parse", "--verify", ref):
+                return TAG_OBJECT
+            if args == ("merge-base", "--is-ancestor", REVISION, "refs/remotes/origin/main"):
+                return ""
+            if args == VERIFY_LOCAL_TAG:
+                return f"{REVISION} commit {version}"
+            if args[0] == "show" and args[1].startswith(f"{REVISION}:"):
+                return workspace_file(args[1].split(":", 1)[1])
+            raise AssertionError(f"unexpected Git command {args}")
+
+        return git
+
     def test_release_event_and_version(self):
         version = f"{VERSION}-beta.1"
         self.assertEqual(source.release_tag(version), (VERSION, "beta"))
         self.assertEqual(source.release_tag(VERSION), (VERSION, "stable"))
-        for invalid in ("0.0.0", "v0.9.0", "0.09.0", "0.9.0-beta.0", "0.9.0-build.aaaaaaaa", "0.9.0-rc.1"):
+        for invalid in ("0.0.0", "v0.9.0", "0.09.0", "0.9.0-beta.0", "0.9.0-rc.1",
+                        "0.9.0-build.aaaaaaa", "0.9.0-build.aaaaaaaaa", "0.9.0-build.AAAAAAAA"):
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
                 source.release_tag(invalid)
         release = {"action": "published", "release": {"tag_name": version, "draft": False, "prerelease": True}}
-        source.verify_event("release", release, version, "beta")
+        source.verify_event("release", release, version, "beta", revision=REVISION, tag_object=TAG_OBJECT)
         for event, fields in (("push", {}), ("release", {"draft": True}), ("release", {"prerelease": False})):
             with self.subTest(event=event, fields=fields), self.assertRaises(ValueError):
-                source.verify_event(event, {**release, "release": {**release["release"], **fields}}, version, "beta")
+                source.verify_event(event, {**release, "release": {**release["release"], **fields}},
+                                    version, "beta", revision=REVISION, tag_object=TAG_OBJECT)
+
+    def test_build_push_verifies_event_and_emits_source(self):
+        self.assertEqual(source.release_tag(BUILD_VERSION, revision=REVISION), (VERSION, "build"))
+        with self.assertRaisesRegex(ValueError, "suffix does not match"):
+            source.release_tag(BUILD_VERSION, revision=TAG_OBJECT)
+
+        ref = f"refs/tags/{BUILD_VERSION}"
+        event = {"ref": ref, "created": True, "deleted": False, "forced": False,
+                 "before": "0" * 40, "after": TAG_OBJECT}
+        with (tempfile.TemporaryDirectory(dir="/tmp", prefix="docsmcp-release-event-") as directory,
+              patch.object(source, "git", side_effect=self.git_for_tag(BUILD_VERSION)),
+              patch.object(source, "verify_tag") as tag, patch.object(source, "verify_ci") as ci,
+              patch.object(sys, "argv", [source.__file__])):
+            payload = Path(directory) / "event.json"
+            output = Path(directory) / "output"
+            env = {"GITHUB_EVENT_NAME": "push", "GITHUB_EVENT_PATH": str(payload),
+                   "GITHUB_REPOSITORY": source.REPOSITORY, "GITHUB_REF": ref,
+                   "GITHUB_SHA": REVISION, "GITHUB_OUTPUT": str(output)}
+            with patch.dict(os.environ, env):
+                for changes in ({"ref": "refs/heads/main"}, {"created": False}, {"deleted": True},
+                                {"forced": True}, {"before": REVISION}, {"after": "c" * 40}):
+                    payload.write_text(json.dumps({**event, **changes}))
+                    with self.subTest(changes=changes), self.assertRaisesRegex(ValueError, "matching build tag"):
+                        source.main()
+                payload.write_text(json.dumps(event))
+                with (patch.dict(os.environ, {"GITHUB_EVENT_NAME": "release"}),
+                      self.assertRaisesRegex(ValueError, "matching build tag")):
+                    source.main()
+                with (patch.dict(os.environ, {"GITHUB_SHA": "c" * 40}),
+                      self.assertRaisesRegex(ValueError, "tag, event, and checkout differ")):
+                    source.main()
+                self.assertFalse(output.exists())
+                tag.assert_not_called()
+                ci.assert_not_called()
+                tag.side_effect = ValueError("remote annotated tag changed")
+                with (patch.object(sys, "argv", [source.__file__, "recheck"]),
+                      patch.dict(os.environ, {"RELEASE_VERSION": BUILD_VERSION, "RELEASE_REVISION": REVISION,
+                                              "RELEASE_TAG_OBJECT": TAG_OBJECT}),
+                      self.assertRaisesRegex(ValueError, "remote annotated tag changed")):
+                    source.main()
+                tag.assert_called_once_with(BUILD_VERSION, REVISION, TAG_OBJECT)
+                tag.reset_mock(side_effect=True)
+                for after, github_sha in ((TAG_OBJECT, REVISION), (REVISION, TAG_OBJECT)):
+                    with self.subTest(after=after), patch.dict(os.environ, {"GITHUB_SHA": github_sha}):
+                        payload.write_text(json.dumps({**event, "after": after}))
+                        source.main()
+                        self.assertEqual(dict(line.split("=", 1) for line in output.read_text().splitlines()),
+                                         {"version": BUILD_VERSION, "revision": REVISION, "kind": "build",
+                                          "tag_object": TAG_OBJECT})
+                        output.unlink()
+                        tag.assert_called_once_with(BUILD_VERSION, REVISION, TAG_OBJECT)
+                        ci.assert_called_once_with(REVISION)
+                        tag.reset_mock()
+                        ci.reset_mock()
 
     def test_preflight_checks_exact_tag_and_only_then_stages(self):
-        ref = f"refs/tags/{VERSION}"
-
-        def git(*args):
-            if args == ("rev-parse", "--verify", ref):
-                return TAG_OBJECT
-            if args == ("rev-parse", "--verify", f"{ref}^{{commit}}"):
-                return REVISION
-            if args == ("merge-base", "--is-ancestor", REVISION, "refs/remotes/origin/main"):
-                return ""
-            self.assertEqual(args[0], "show")
-            self.assertTrue(args[1].startswith(f"{REVISION}:"))
-            return workspace_file(args[1].split(":", 1)[1])
-
         staged = Mock()
-        with (patch.object(source, "git", side_effect=git), patch.object(source, "verify_tag") as tag,
+        with (patch.object(source, "git", side_effect=self.git_for_tag(VERSION)), patch.object(source, "verify_tag") as tag,
               patch.object(source, "verify_ci") as ci, patch.object(source, "stage_source", staged)):
             source.preflight(VERSION)
             tag.assert_called_once_with(VERSION, REVISION, TAG_OBJECT)
@@ -101,6 +173,29 @@ class SourceTests(unittest.TestCase):
             ci.side_effect = ValueError("CI failed")
             with self.assertRaisesRegex(ValueError, "CI failed"):
                 source.preflight(VERSION)
+            staged.assert_not_called()
+
+    def test_build_preflight_verifies_local_signature_before_ci_and_staging(self):
+        git_for_tag = self.git_for_tag(BUILD_VERSION)
+        with (patch.object(source, "git", side_effect=git_for_tag) as git, patch.object(source, "verify_tag") as remote,
+              patch.object(source, "verify_ci") as ci, patch.object(source, "stage_source") as staged):
+            source.preflight(BUILD_VERSION)
+            git.assert_any_call(*VERIFY_LOCAL_TAG)
+            remote.assert_not_called()
+            ci.assert_called_once_with(REVISION)
+            self.assertEqual(staged.call_args.args[:2], (REVISION, BUILD_VERSION))
+
+            def unsigned(*args):
+                if args == VERIFY_LOCAL_TAG:
+                    raise subprocess.CalledProcessError(1, "git verify-tag")
+                return git_for_tag(*args)
+
+            git.side_effect = unsigned
+            ci.reset_mock()
+            staged.reset_mock()
+            with self.assertRaises(subprocess.CalledProcessError):
+                source.preflight(BUILD_VERSION)
+            ci.assert_not_called()
             staged.assert_not_called()
 
     def test_signed_annotated_tag(self):
@@ -134,8 +229,11 @@ class SourceTests(unittest.TestCase):
         with patch.object(source, "api", return_value=[{"workflow_runs": [{**run, "head_sha": "c" * 40}]}]):
             with self.assertRaisesRegex(ValueError, "no canonical"):
                 source.verify_ci(REVISION)
-        with patch.object(source, "api", return_value=[{"workflow_runs": [run, {**run, "id": 9, "conclusion": "failure"}]}]):
-            with self.assertRaisesRegex(ValueError, "newest canonical CI did not pass"):
+        for status, conclusion in (("completed", "failure"), ("in_progress", None)):
+            newer = {**run, "id": 9, "status": status, "conclusion": conclusion}
+            with (self.subTest(status=status),
+                  patch.object(source, "api", return_value=[{"workflow_runs": [run, newer]}]),
+                  self.assertRaisesRegex(ValueError, "newest canonical CI did not pass")):
                 source.verify_ci(REVISION)
         with patch.object(source, "api", side_effect=[runs, [{"jobs": [job]}], check, {**run, "run_attempt": 3}]):
             with self.assertRaisesRegex(ValueError, "changed attempt"):
@@ -328,6 +426,45 @@ class ProxyInventoryTests(unittest.TestCase):
 
 @unittest.skipUnless(os.environ.get("DOCS_MCP_TEST_LOOPBACK") == "1", "requires Docker and Skopeo")
 class RegistryTests(unittest.TestCase):
+    def test_build_tag_publication_and_recovery(self):
+        with (tempfile.TemporaryDirectory(dir="/tmp", prefix="docsmcp-release-test-") as temporary,
+              images.local_registry() as host):
+            work = Path(temporary)
+            auth = work / "auth.json"
+            auth.write_text("{}\n")
+            registry = publish.Registry(host, auth)
+            receipt = work / "receipt.json"
+            assembled = bundle(work / "build", REVISION, BUILD_VERSION)
+            cli = [sys.executable, "-B", Path(publish.__file__), "--loopback-registry", host,
+                   "--revision", REVISION, "--version", BUILD_VERSION]
+            copy = registry.copy
+
+            def interrupt(source, destination):
+                if "-sync:" in destination:
+                    raise subprocess.CalledProcessError(1, "simulated interrupted build publication")
+                copy(source, destination)
+
+            with patch.object(registry, "copy", side_effect=interrupt):
+                with self.assertRaises(subprocess.CalledProcessError):
+                    publish.publish(registry, assembled, receipt, REVISION, BUILD_VERSION)
+            self.assertFalse(receipt.exists())
+            self.assertIsNotNone(registry.manifest(f"{host}/docs-mcp-serve:{BUILD_VERSION}"))
+            self.assertIsNone(registry.manifest(f"{host}/docs-mcp-sync:{BUILD_VERSION}", missing=True))
+            for command, extra in (("publish", ["--authfile", auth, "--bundle", assembled]),
+                                   ("verify-anonymous", [])):
+                subprocess.run([*cli, command, "--receipt", receipt, *extra], check=True, timeout=60)
+            self.assertEqual(json.loads(receipt.read_bytes())["version"], BUILD_VERSION)
+            collision = REVISION[:8] + "c" * 32
+            conflict = bundle(work / "conflict", collision, BUILD_VERSION)
+            with self.assertRaisesRegex(ValueError, "refusing to replace"):
+                publish.publish(registry, conflict, receipt, collision, BUILD_VERSION)
+            result = subprocess.run([*cli, "promote-latest", "--receipt", receipt, "--authfile", auth],
+                                    text=True, capture_output=True, timeout=60)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("expected a stable OCI version", result.stderr)
+            for role in images.ROLES:
+                self.assertIsNone(registry.manifest(f"{host}/docs-mcp-{role}:latest", missing=True))
+
     def test_publication_recovery_and_monotonic_latest(self):
         with (tempfile.TemporaryDirectory(dir="/tmp", prefix="docsmcp-release-test-") as temporary,
               images.local_registry() as host):

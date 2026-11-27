@@ -154,9 +154,9 @@ def image_labels(revision, version):
 
 
 def build(destination, revision, seed, repeat, version=CANDIDATE_VERSION):
-    parse_version(version)
     arch = architecture()
     revision = output("git", "-C", ROOT, "rev-parse", "--verify", "--end-of-options", f"{revision}^{{commit}}")
+    parse_version(version, revision=revision)
     epoch = output("git", "-C", ROOT, "show", "-s", "--format=%ct", revision)
     destination.mkdir(mode=0o700)
     with tempfile.TemporaryDirectory(prefix="docsmcp8-source-", dir="/tmp") as directory:
@@ -209,6 +209,7 @@ def assemble(amd64, arm64, destination, *, revision=None, version=None):
     receipts = [json.loads((directory / "receipt.json").read_text()) for directory in inputs]
     expected_revision = receipts[0]["revision"] if revision is None else revision
     expected_version = receipts[0]["version"] if version is None else version
+    parse_version(expected_version, revision=expected_revision)
     for directory, receipt, arch in zip(inputs, receipts, ARCHES, strict=True):
         if (receipt["platform"] != arch or not receipt["repeated"]
                 or receipt["source"] != SOURCE or set(receipt["images"]) != set(ROLES)
