@@ -98,11 +98,11 @@ ARG TARGETARCH
 # APK's transaction log embeds wall-clock time in the image layer.
 RUN set -eu; \
     case "$TARGETARCH" in \
-        amd64) arch=x86_64; digest=8b37229c4761cf0eef5089045283526ef43bf335073050515010d34a313186ed ;; \
-        arm64) arch=aarch64; digest=3e12146a2f15e27a22d70d21f8f52be29966105ce304c55bab2bfe75604981a9 ;; \
+        amd64) arch=x86_64; digest=b7d56295eab909875e724992b53ccc242fa792b40d682f303595f958a97b0224 ;; \
+        arm64) arch=aarch64; digest=1b955e97abfb07f24a1d6d4b7699be8f4f55fc180fd1f8191408335c36bf603c ;; \
         *) exit 1 ;; \
     esac; \
-    package=/tmp/libxml2-2.13.9-r3.apk; \
+    package=/tmp/libxml2-2.13.9-r5.apk; \
     wget -q -O "$package" "https://dl-cdn.alpinelinux.org/alpine/v3.24/main/$arch/${package##*/}"; \
     printf '%s  %s\n' "$digest" "$package" | sha256sum -c -; \
     apk --no-logfile add --no-network --no-cache "$package"; \
