@@ -1289,3 +1289,44 @@ removed during scoped cleanup. The test Compose projects, firewall tables,
 registries, builders, image tags, Minikube profiles, and SDK fixture were
 removed. The test logs, native build and restore receipts, and audit reports
 were retained under `/tmp`.
+
+## PostgreSQL `libxml2` refresh
+
+On 2026-11-28, the amd64 and arm64 jobs for `2.0.0-build.6347e042`
+passed the native builds, Compose, and restore. Both exact-image audits
+blocked publication on six high-severity `libxml2` findings in PostgreSQL,
+17 RustSec findings in OxiBelt `0.10.0`, and missing compiled Cargo graphs
+in the signed proxy inventories. [amd64 evidence](https://github.com/PublicData-stream/docs-mcp/actions/runs/46119761633/artifacts/15254647599) · [arm64 evidence](https://github.com/PublicData-stream/docs-mcp/actions/runs/46119761633/artifacts/15255475118)
+
+At `ec66b8d9b017`, both Alpine `libxml2` `2.13.9-r5` APK hashes matched
+the Dockerfile pins. Two independent builds on native amd64 with rootful
+Docker 29.10.1, Compose 5.8.0, and ext4 temporary storage reproduced all four
+runnable digests. The PostgreSQL manifest was
+`sha256:52f4912c00f836426dd9ef80a2455f6f187629ee93f3e9acefdcde2fb27f312d`.
+It ran as UID/GID 70 and rejected root startup. Trivy 0.76.2 with the
+2026-11-28 07:04 UTC database identified the patched package and reported zero
+high or critical PostgreSQL findings. All six original findings were absent.
+
+The frozen Rust 1.100.0 gate, all 15 release-helper tests with the loopback
+registry, actionlint, Markdown link checks, and Compose Phases 0–7 passed.
+Phase 8 restored through OxiBelt `0.10.0`, reopened the previous PostgreSQL
+data directory, and preserved schema 9 glob approvals and path denials.
+The Restricted Phase 7 smoke on Minikube 1.39.0 with Kubernetes 1.37.0 and
+rootless Docker verified feed-to-MCP publication and framed worker denials.
+
+The selected OxiBelt `0.11.0-build.4f3154d8` passed Phase 8 locally in a
+disposable checkout, including HTTP/2, TLS identity, authority, Origin,
+forwarding, private-route, and restored MCP read checks. Both release audits
+reported zero RustSec findings in the stamped workspace and ripgrep. At
+RustSec revision `3eebb903ba6c`, the candidate had three findings in its full
+lockfile (`RUSTSEC-2026-0385`, `RUSTSEC-2026-0600`, and `RUSTSEC-2026-0592`),
+and the `0.10.0` pin still had 17. Some OxiBelt yank checks lacked local
+index entries. The candidate index provenance and both native SBOM
+signatures verified. Both candidate SBOMs failed the compiled Cargo graph
+check. Release qualification remains blocked on OxiBelt, and native arm64
+qualification of the patched docs-mcp image is pending. [OxiBelt build](https://github.com/OxiBelt/OxiBelt/actions/runs/40022215502)
+
+Scoped Compose resources, firewall tables, registries, builders, test image
+references, the Minikube profile, and the disposable checkout and SDK fixture
+were removed. The local build receipt, restore records, and audit reports
+were retained under `/tmp`.
